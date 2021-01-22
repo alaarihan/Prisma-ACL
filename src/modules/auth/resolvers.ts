@@ -6,8 +6,9 @@ import { prisma } from "../../common/prisma";
 
 export default {
   Query: {
-    me: (_parent, args) => {
-      return prisma.user.findUnique(args);
+    me: (_parent, args, ctx) => {
+      if (!ctx.user || !ctx.user.id) throw new Error('User not found')
+      return ctx.user;
     },
   },
   Mutation: {
