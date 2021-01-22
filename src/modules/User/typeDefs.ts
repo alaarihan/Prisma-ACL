@@ -6,11 +6,7 @@ export default gql`
     email: String!
     firstName: String
     lastName: String
-    password: String!
     role: UserRole!
-    verified: Boolean!
-    verificationToken: String
-    blocked: Boolean!
     country: String
     dandaraCenter: String
     dateofBirth: DateTime
