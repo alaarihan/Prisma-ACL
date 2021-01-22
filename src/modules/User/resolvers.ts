@@ -1,59 +1,43 @@
+import { prisma } from "../../common/prisma";
+
 export default {
   Query: {
-    findUniqueUser: (_parent, args, ctx) => {
-      return ctx.prisma.user.findUnique(args)
+    findUniqueUser: (_parent, args) => {
+      return prisma.user.findUnique(args);
     },
-    findFirstUser: (_parent, args, ctx) => {
-      return ctx.prisma.user.findFirst(args)
+    findFirstUser: (_parent, args) => {
+      return prisma.user.findFirst(args);
     },
-    findManyUser: (_parent, args, ctx) => {
-      return ctx.prisma.user.findMany(args)
+    findManyUser: (_parent, args) => {
+      return prisma.user.findMany(args);
     },
-    findManyUserCount: (
-      _parent,
-      args,
-      ctx,
-    ) => {
-      return ctx.prisma.user.count(args)
+    findManyUserCount: (_parent, args) => {
+      return prisma.user.count(args);
     },
-    aggregateUser: (_parent, args, ctx) => {
-      return ctx.prisma.user.aggregate(args)
+    aggregateUser: (_parent, args) => {
+      return prisma.user.aggregate(args);
     },
   },
   Mutation: {
-    createOneUser: (_parent, args, ctx) => {
-      return ctx.prisma.user.create(args)
+    createOneUser: (_parent, args) => {
+      return prisma.user.create(args);
     },
-    updateOneUser: (_parent, args, ctx) => {
-      return ctx.prisma.user.update(args)
+    updateOneUser: (_parent, args) => {
+      return prisma.user.update(args);
     },
-    deleteOneUser: async (
-      _parent,
-      args,
-      ctx,
-    ) => {
-      await ctx.prisma
-        .onDelete({ model: 'User', where: args.where })
-      return ctx.prisma.user.delete(args)
+    deleteOneUser: async (_parent, args) => {
+      await prisma.onDelete({ model: "User", where: args.where });
+      return prisma.user.delete(args);
     },
-    upsertOneUser: async (
-      _parent,
-      args,
-      ctx,
-    ) => {
-      return ctx.prisma.user.upsert(args)
+    upsertOneUser: async (_parent, args) => {
+      return prisma.user.upsert(args);
     },
-    deleteManyUser: async (
-      _parent,
-      args,
-      ctx,
-    ) => {
-      await ctx.prisma
-        .onDelete({ model: 'User', where: args.where })
-      return ctx.prisma.user.deleteMany(args)
+    deleteManyUser: async (_parent, args) => {
+      await prisma.onDelete({ model: "User", where: args.where });
+      return prisma.user.deleteMany(args);
     },
-    updateManyUser: (_parent, args, ctx) => {
-      return ctx.prisma.user.updateMany(args)
+    updateManyUser: (_parent, args) => {
+      return prisma.user.updateMany(args);
     },
   },
-}
+};

@@ -2,19 +2,20 @@ import { hash, compare } from "bcrypt";
 import { sign } from "jsonwebtoken";
 import { sendEmail } from "../../common/sendEmail";
 import { generateToken } from "../../common/generateToken";
+import { prisma } from "../../common/prisma";
 
 export default {
   Query: {
-    me: (_parent, args, ctx) => {
-      return ctx.prisma.user.findUnique(args);
+    me: (_parent, args) => {
+      return prisma.user.findUnique(args);
     },
   },
   Mutation: {
-    signup: async (_parent, args, ctx) => {
+    signup: async (_parent, args) => {
       args.password = await hash(args.password, 10);
       args.verificationToken = generateToken();
       delete args.select;
-      const user = await ctx.prisma.user.create({ data: args }).catch((err) => {
+      const user = await prisma.user.create({ data: args }).catch((err) => {
         throw new Error(`User couldn't be created! ${err.message}`);
       });
       sendEmail
@@ -49,8 +50,8 @@ export default {
         user,
       };
     },
-    login: async (_parent, args, ctx) => {
-      const user = await ctx.prisma.user.findUnique({
+    login: async (_parent, args) => {
+      const user = await prisma.user.findUnique({
         where: { email: args.email },
       });
       if (!user) {
@@ -69,8 +70,8 @@ export default {
         user,
       };
     },
-    async verifyUserEmail(_parent, { email, token }, ctx) {
-      const user = await ctx.prisma.user.findUnique({ where: { email } });
+    async verifyUserEmail(_parent, { email, token }) {
+      const user = await prisma.user.findUnique({ where: { email } });
       if (!user) {
         throw new Error(`No account found for this email address: ${email}`);
       }
@@ -79,7 +80,7 @@ export default {
         user.verificationToken &&
         user.verificationToken === token
       ) {
-        await ctx.prisma.user.update({
+        await prisma.user.update({
           where: {
             email,
           },
@@ -93,14 +94,16 @@ export default {
       }
       return true;
     },
-    async forgotPassword(_parent, { email }, ctx) {
-      let user = await ctx.prisma.user.findUnique({ where: { email } }).catch(err => undefined);
+    async forgotPassword(_parent, { email }) {
+      let user = await prisma.user
+        .findUnique({ where: { email } })
+        .catch((err) => undefined);
       if (!user) {
         return true;
       }
       let verificationToken = generateToken();
-      
-      user = await ctx.prisma.user.update({
+
+      user = await prisma.user.update({
         where: { email },
         data: { verificationToken },
       });
@@ -129,10 +132,8 @@ export default {
         });
       return true;
     },
-    async resetUserPassword(_parent, { email, token, password }, ctx) {
-      const user = await ctx.prisma.user.findUnique(
-        { where: { email } }
-      );
+    async resetUserPassword(_parent, { email, token, password }) {
+      const user = await prisma.user.findUnique({ where: { email } });
       if (!user) {
         throw new Error(`No account found for this email address: ${email}`);
       }
@@ -142,11 +143,8 @@ export default {
       }
       let hashedPassword = await hash(password, 10);
       let currentDate = new Date();
-      if (
-        user.verificationToken &&
-        user.verificationToken === token
-      ) {
-        await ctx.prisma.user.update({
+      if (user.verificationToken && user.verificationToken === token) {
+        await prisma.user.update({
           where: {
             email,
           },

@@ -12,10 +12,6 @@ const server = new ApolloServer({
   schema,
   context: async ({ req }) => {
     if (req.body.operationName === "IntrospectionQuery") return;
-    console.log(
-      "start !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
-      req
-    );
     let authScope = "";
     let user;
     if (req.headers && req.headers.authorization) {
@@ -33,7 +29,6 @@ const server = new ApolloServer({
     return {
       req,
       user,
-      prisma,
     };
   },
 });
