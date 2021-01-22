@@ -3,5 +3,5 @@ import { sdlInputs } from "@paljs/plugins";
 
 export const InputsModule = createModule({
   id: "Inputs",
-  typeDefs: sdlInputs(),
+  typeDefs: sdlInputs({doNotUseFieldUpdateOperationsInput: true}),
 });
