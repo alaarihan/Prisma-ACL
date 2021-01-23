@@ -70,10 +70,21 @@ function createInput(options?: OptionsType) {
     const enums = [...schema.enumTypes.prisma];
     if (schema.enumTypes.model) enums.push(...schema.enumTypes.model);
     enums.forEach((item) => {
+      const modelExcludedFields = options.exclude.filter(
+        (enumItem) =>
+          enumItem.names.includes(item.name) && enumItem.types.includes("enum")
+      );
       fileContent += `enum ${item.name} {`;
       item.values.forEach((item2) => {
-        fileContent += `
+        if (
+          !modelExcludedFields ||
+          !modelExcludedFields.find((enumItem2) =>
+            enumItem2.fields.includes(item2)
+          )
+        ) {
+          fileContent += `
         ${item2}`;
+        }
       });
       fileContent += `}
   
@@ -84,24 +95,19 @@ function createInput(options?: OptionsType) {
       inputObjectTypes.push(...schema.inputObjectTypes.model);
 
     inputObjectTypes.forEach((model) => {
-      const modelExcludedFields = options.exclude.find(
-        (item) => item.name === model.name
+      const modelExcludedFields = options.exclude.filter(
+        (item) => item.names.includes(model.name) && item.types.includes("input")
       );
 
-      if (
-        (model.fields.length > 0 && !modelExcludedFields) ||
-        (model.fields.length > 0 &&
-          modelExcludedFields &&
-          model.fields.length > modelExcludedFields.fields.length)
-      ) {
+      if (model.fields.length > 0) {
         fileContent += `input ${model.name} {
       `;
         model.fields.forEach((field) => {
           if (
-            !options.exclude ||
-            !options.exclude.find(
-              (item) =>
-                item.name === model.name && item.fields.includes(field.name)
+            !modelExcludedFields ||
+            !modelExcludedFields.find(
+              (item2) =>
+                item2.fields.includes(field.name)
             )
           ) {
             const inputType = getInputType(field, options);
@@ -125,15 +131,26 @@ function createInput(options?: OptionsType) {
     schema?.outputObjectTypes.prisma
       .filter((type) => type.name.includes("Aggregate"))
       .forEach((type) => {
+        const modelExcludedFields = options.exclude.filter(
+          (item) =>
+            item.names.includes(type.name) && item.types.includes("aggregate")
+        );
         fileContent += `type ${type.name} {
       `;
         type.fields.forEach((field) => {
-          fileContent += `${field.name}: ${
-            field.outputType.isList
-              ? `[${field.outputType.type}!]`
-              : field.outputType.type
-          }${field.isRequired ? "!" : ""}
+          if (
+            !modelExcludedFields ||
+            !modelExcludedFields.find((items2) =>
+              items2.fields.includes(field.name)
+            )
+          ) {
+            fileContent += `${field.name}: ${
+              field.outputType.isList
+                ? `[${field.outputType.type}!]`
+                : field.outputType.type
+            }${field.isRequired ? "!" : ""}
         `;
+          }
         });
         fileContent += `}
     
