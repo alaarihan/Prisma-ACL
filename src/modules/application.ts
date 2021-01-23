@@ -1,4 +1,5 @@
 import { UserModule } from "./User/User.module";
+import { RoleAccessModule } from './RoleAccess/RoleAccess.module'
 import { LogModule } from "./Log/Log.module";
 import { createApplication } from "graphql-modules";
 import { InputsModule } from "./inputs/inputs.module";
@@ -8,7 +9,7 @@ import { jwtAuth } from "../middlewares/jwtAuth";
 // import { logger } from '../middlewares/logger'
 
 export const application = createApplication({
-  modules: [InputsModule, AuthModule, LogModule, UserModule],
+  modules: [InputsModule, AuthModule, LogModule, UserModule, RoleAccessModule],
   middlewares: {
     "*": { "*": [jwtAuth, addSelect] },
   },

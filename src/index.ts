@@ -29,8 +29,6 @@ const server = new ApolloServer({
             dandaraCenter: true,
             firstName: true,
             lastName: true,
-            blocked: true,
-            verified: true,
             role: true,
           } })
           .catch((err) => undefined);

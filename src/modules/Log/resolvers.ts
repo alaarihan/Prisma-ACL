@@ -1,41 +1,43 @@
+import { prisma } from '../../common/prisma'
+
 export default {
   Query: {
     findUniqueLog: (_parent, args, ctx) => {
-      return ctx.prisma.log.findUnique(args);
+      return prisma.log.findUnique(args);
     },
     findFirstLog: (_parent, args, ctx) => {
-      return ctx.prisma.log.findFirst(args);
+      return prisma.log.findFirst(args);
     },
     findManyLog: (_parent, args, ctx) => {
-      return ctx.prisma.log.findMany(args);
+      return prisma.log.findMany(args);
     },
     findManyLogCount: (_parent, args, ctx) => {
-      return ctx.prisma.log.count(args);
+      return prisma.log.count(args);
     },
     aggregateLog: (_parent, args, ctx) => {
-      return ctx.prisma.log.aggregate(args);
+      return prisma.log.aggregate(args);
     },
   },
   Mutation: {
     createOneLog: (_parent, args, ctx) => {
-      return ctx.prisma.log.create(args);
+      return prisma.log.create(args);
     },
     updateOneLog: (_parent, args, ctx) => {
-      return ctx.prisma.log.update(args);
+      return prisma.log.update(args);
     },
     deleteOneLog: async (_parent, args, ctx) => {
-      await ctx.prisma.onDelete({ model: "Log", where: args.where });
-      return ctx.prisma.log.delete(args);
+      await prisma.onDelete({ model: "Log", where: args.where });
+      return prisma.log.delete(args);
     },
     upsertOneLog: async (_parent, args, ctx) => {
-      return ctx.prisma.log.upsert(args);
+      return prisma.log.upsert(args);
     },
     deleteManyLog: async (_parent, args, ctx) => {
-      await ctx.prisma.onDelete({ model: "Log", where: args.where });
-      return ctx.prisma.log.deleteMany(args);
+      await prisma.onDelete({ model: "Log", where: args.where });
+      return prisma.log.deleteMany(args);
     },
     updateManyLog: (_parent, args, ctx) => {
-      return ctx.prisma.log.updateMany(args);
+      return prisma.log.updateMany(args);
     },
   },
 };

@@ -1,5 +1,5 @@
 import { hash, compare } from "bcrypt";
-import { sign } from "jsonwebtoken";
+import { sign, verify } from "jsonwebtoken";
 import { sendEmail } from "../../common/sendEmail";
 import { generateToken } from "../../common/generateToken";
 import { prisma } from "../../common/prisma";
@@ -7,14 +7,21 @@ import { prisma } from "../../common/prisma";
 export default {
   Query: {
     me: (_parent, args, ctx) => {
-      if (!ctx.user || !ctx.user.id) throw new Error('User not found')
+      if (!ctx.user || !ctx.user.id) throw new Error("User not found");
       return ctx.user;
     },
   },
   Mutation: {
     signup: async (_parent, args) => {
       args.password = await hash(args.password, 10);
-      args.verificationToken = generateToken();
+      const generatedToken = generateToken();
+      args.verificationToken = sign(
+        { token: generatedToken, created: new Date(), type: "email" },
+        process.env.APP_SECRET,
+        {
+          expiresIn: "1d",
+        }
+      );
       delete args.select;
       const user = await prisma.user.create({ data: args }).catch((err) => {
         throw new Error(`User couldn't be created! ${err.message}`);
@@ -27,13 +34,14 @@ export default {
             //   attachments: [
             // 	{
             // 	  filename: 'logo.jpg',
-            // 	  path: path.resolve('src/email-templates/signup/imgs/logo.jpg'),
+            // 	  path: path.resolve('src/email-templates/imgs/logo.jpg'),
             // 	  cid: 'logo',
             // 	},
             //   ],
           },
           locals: {
             user,
+            token: generatedToken,
           },
         })
         .then((res) => {
@@ -56,7 +64,7 @@ export default {
         where: { email: args.email },
       });
       if (!user) {
-        throw new Error(`No user found for email: ${args.email}`);
+        throw new Error(`No account found for this email: ${args.email}`);
       }
       const passwordValid = await compare(args.password, user.password);
       if (!passwordValid) {
@@ -76,22 +84,26 @@ export default {
       if (!user) {
         throw new Error(`No account found for this email address: ${email}`);
       }
+      const verificationToken = user.verificationToken
+        ? verify(user.verificationToken, process.env.APP_SECRET)
+        : false;
+      if (!verificationToken) throw new Error("Invalid token!");
       if (
-        !user.verified &&
-        user.verificationToken &&
-        user.verificationToken === token
+        user.role === "UNVERIFIED" &&
+        verificationToken.token === token &&
+        verificationToken.type === 'email'
       ) {
         await prisma.user.update({
           where: {
             email,
           },
           data: {
-            verified: true,
+            role: "USER",
             verificationToken: null,
           },
         });
       } else {
-        throw new Error("Invalid token");
+        throw new Error("Invalid token!");
       }
       return true;
     },
@@ -100,9 +112,16 @@ export default {
         .findUnique({ where: { email } })
         .catch((err) => undefined);
       if (!user) {
-        return true;
+        throw new Error("Account not exists!");
       }
-      let verificationToken = generateToken();
+      const generatedToken = generateToken();
+      const verificationToken = sign(
+        { token: generatedToken, created: new Date(), type: "password" },
+        process.env.APP_SECRET,
+        {
+          expiresIn: "1d",
+        }
+      );
 
       user = await prisma.user.update({
         where: { email },
@@ -116,13 +135,14 @@ export default {
             //   attachments: [
             // 	{
             // 	  filename: 'logo.jpg',
-            // 	  path: path.resolve('src/email-templates/signup/imgs/logo.jpg'),
+            // 	  path: path.resolve('src/email-templates/imgs/logo.jpg'),
             // 	  cid: 'logo',
             // 	},
             //   ],
           },
           locals: {
             user,
+            token: generatedToken,
           },
         })
         .then((res) => {
@@ -139,12 +159,15 @@ export default {
         throw new Error(`No account found for this email address: ${email}`);
       }
 
-      if (!user.verified) {
+      if (user.role === "UNVERIFIED") {
         throw new Error("Verify your email first!");
       }
       let hashedPassword = await hash(password, 10);
-      let currentDate = new Date();
-      if (user.verificationToken && user.verificationToken === token) {
+      const verificationToken = user.verificationToken
+        ? verify(user.verificationToken, process.env.APP_SECRET)
+        : false;
+      if (!verificationToken) throw new Error("Invalid token!");
+      if (verificationToken.token === token && verificationToken.type === 'password') {
         await prisma.user.update({
           where: {
             email,

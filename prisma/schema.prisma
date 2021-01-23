@@ -13,10 +13,8 @@ model User {
   firstName         String?
   lastName          String?
   password          String
-  role              UserRole  @default(USER)
-  verified          Boolean   @default(value: false)
+  role              UserRole  @default(UNVERIFIED)
   verificationToken String?
-  blocked           Boolean   @default(false)
   country           String?
   dandaraCenter     String?
   dateOfBirth       DateTime?
@@ -25,8 +23,30 @@ model User {
 }
 
 enum UserRole {
+  BLOCKED
+  UNVERIFIED
   USER
   ADMIN
+}
+
+enum Permission {
+  NONE
+  OWN
+  ALL
+}
+
+model RoleAccess {
+  id        Int        @id @default(autoincrement())
+  role      UserRole
+  type      String
+  create    Boolean    @default(false)
+  read      Permission @default(NONE)
+  update    Permission @default(NONE)
+  delete    Permission @default(NONE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([role, type])
 }
 
 model Log {
