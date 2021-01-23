@@ -1,5 +1,6 @@
 import { hash, compare } from "bcrypt";
 import { sign, verify } from "jsonwebtoken";
+import path from "path";
 import { sendEmail } from "../../common/sendEmail";
 import { generateToken } from "../../common/generateToken";
 import { prisma } from "../../common/prisma";
@@ -31,21 +32,18 @@ export default {
           template: "signup",
           message: {
             to: args.email,
-            //   attachments: [
-            // 	{
-            // 	  filename: 'logo.jpg',
-            // 	  path: path.resolve('src/email-templates/imgs/logo.jpg'),
-            // 	  cid: 'logo',
-            // 	},
-            //   ],
+            attachments: [
+              {
+                filename: "logo.png",
+                path: path.resolve("src/email-templates/imgs/logo.png"),
+                cid: "logo",
+              },
+            ],
           },
           locals: {
             user,
             token: generatedToken,
           },
-        })
-        .then((res) => {
-          console.log(res);
         })
         .catch((error) => {
           console.error("sending email error happened!!", error);
@@ -91,7 +89,7 @@ export default {
       if (
         user.role === "UNVERIFIED" &&
         verificationToken.token === token &&
-        verificationToken.type === 'email'
+        verificationToken.type === "email"
       ) {
         await prisma.user.update({
           where: {
@@ -132,21 +130,18 @@ export default {
           template: "forgotPassword",
           message: {
             to: email,
-            //   attachments: [
-            // 	{
-            // 	  filename: 'logo.jpg',
-            // 	  path: path.resolve('src/email-templates/imgs/logo.jpg'),
-            // 	  cid: 'logo',
-            // 	},
-            //   ],
+            attachments: [
+              {
+                filename: "logo.png",
+                path: path.resolve("src/email-templates/imgs/logo.png"),
+                cid: "logo",
+              },
+            ],
           },
           locals: {
             user,
             token: generatedToken,
           },
-        })
-        .then((res) => {
-          console.log(res);
         })
         .catch((error) => {
           console.error("sending email error happened!!", error);
@@ -167,7 +162,10 @@ export default {
         ? verify(user.verificationToken, process.env.APP_SECRET)
         : false;
       if (!verificationToken) throw new Error("Invalid token!");
-      if (verificationToken.token === token && verificationToken.type === 'password') {
+      if (
+        verificationToken.token === token &&
+        verificationToken.type === "password"
+      ) {
         await prisma.user.update({
           where: {
             email,
