@@ -3,7 +3,7 @@ import { gql } from 'graphql-modules'
 export default gql`
   type Log {
     id: Int!
-    userId: Int
+    authorId: Int
     operation: String
     message: String
     ip: String!
