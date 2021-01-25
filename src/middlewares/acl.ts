@@ -115,10 +115,16 @@ export const acl = async ({ parent, args, context, info }, next) => {
         if (context.moduleId !== "User") {
           args.select.authorId = true;
         }
-        const item = await prisma[context.moduleId.toLowerCase()].findUnique({
-          where: args.where,
-          rejectOnNotFound: true
-        }).catch(err => { throw new Error(err)});
+        const item = await prisma[
+          context.moduleId.charAt(0).toLowerCase() + context.moduleId.slice(1)
+        ]
+          .findUnique({
+            where: args.where,
+            rejectOnNotFound: true,
+          })
+          .catch((err) => {
+            throw new Error(err);
+          });
         if (
           (item && item.authorId === context.user.id) ||
           (context.moduleId === "User" && item && item.id === context.user.id)
@@ -165,10 +171,16 @@ export const acl = async ({ parent, args, context, info }, next) => {
       } else if (hasDeleteAccess === "OWN") {
         if (context.moduleId === "User")
           throw new ApolloError("Forbidden!", "Forbidden");
-        const item = await prisma[context.moduleId.toLowerCase()].findUnique({
-          where: args.where,
-          rejectOnNotFound: true
-        }).catch(err => { throw new Error(err)});
+        const item = await prisma[
+          context.moduleId.charAt(0).toLowerCase() + context.moduleId.slice(1)
+        ]
+          .findUnique({
+            where: args.where,
+            rejectOnNotFound: true,
+          })
+          .catch((err) => {
+            throw new Error(err);
+          });
         if (
           (item && item.authorId === context.user.id) ||
           (context.moduleId === "User" && item && item.id === context.user.id)
