@@ -1,9 +1,6 @@
-import { hash, compare } from "bcrypt";
+import { hash } from "bcrypt";
 
-export const userMutationsMiddleware = async (
-  { args, context, info },
-  next
-) => {
+export const passHashMiddleware = async ({ args, context, info }, next) => {
   const types = ["Query", "Mutation"];
   const byPassList = ["deleteOneUser", "deleteManyUser"];
   if (
@@ -21,8 +18,8 @@ export const userMutationsMiddleware = async (
     } else if (info.fieldName === "upsertOneUser") {
       if (args.update && args.update.password) {
         args.update.password = await hash(args.update.password, 10);
-      } 
-      if(args.create && args.create.password) {
+      }
+      if (args.create && args.create.password) {
         args.create.password = await hash(args.create.password, 10);
       }
     }

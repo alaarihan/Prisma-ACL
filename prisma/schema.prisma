@@ -57,6 +57,7 @@ model Log {
   ip        String
   host      String
   userAgent String
+  authorId  Int?
   referer   String?
   createdAt DateTime @default(now())
 }

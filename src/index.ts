@@ -22,16 +22,21 @@ const server = new ApolloServer({
       const { userId } = verify(token, process.env.APP_SECRET);
       if (userId) {
         user = await prisma.user
-          .findUnique({ where: { id: userId }, select: {
-            id: true,
-            email: true,
-            country: true,
-            dandaraCenter: true,
-            firstName: true,
-            lastName: true,
-            role: true,
-          } })
-          .catch((err) => undefined);
+          .findUnique({
+            where: { id: userId },
+            select: {
+              id: true,
+              email: true,
+              country: true,
+              dandaraCenter: true,
+              firstName: true,
+              lastName: true,
+              role: true,
+            },
+          })
+          .catch((err) => {
+            throw new Error(err);
+          });
       }
     }
     return {

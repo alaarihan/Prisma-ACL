@@ -1,7 +1,7 @@
 import { createModule } from "graphql-modules";
 import typeDefs from "./typeDefs";
 import resolvers from "./resolvers";
-import { userMutationsMiddleware } from "../../middlewares/userMutationsMiddleware";
+import { passHashMiddleware } from "../../middlewares/passHash";
 
 export const UserModule = createModule({
   id: "User",
@@ -9,7 +9,7 @@ export const UserModule = createModule({
   resolvers,
   middlewares: {
     Mutation: {
-      "*": [userMutationsMiddleware],
-    }
+      "*": [passHashMiddleware],
+    },
   },
 });
