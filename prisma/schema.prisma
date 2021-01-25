@@ -51,7 +51,6 @@ model RoleAccess {
 
 model Log {
   id        Int      @id @default(autoincrement())
-  userId    Int?
   operation String?
   message   String?
   ip        String
