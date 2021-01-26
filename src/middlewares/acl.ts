@@ -5,16 +5,22 @@ function checkUserPermission(permission, permissions) {
   const hasAccess = permissions[permission];
   if (!hasAccess || hasAccess === "NONE") {
     return "NONE";
-  } else if (hasAccess === true || hasAccess === "ALL") {
+  } else if (hasAccess === "ALL") {
     return "ALL";
   } else if (hasAccess === "OWN") {
     return "OWN";
+  } else if (hasAccess === true) {
+    return "YES";
+  } else {
+    return "NO";
   }
 }
 
 export const acl = async ({ parent, args, context, info }, next) => {
   const aclTypes = ["Query", "Mutation"];
   if (context.moduleId === "Auth") return next();
+  const noAuthorTypes = ["User", "RoleAccess"];
+  const createOne = `createOne${context.moduleId}`;
   const uniqueReadType = `findUnique${context.moduleId}`;
   const readTypes = [
     `findFirst${context.moduleId}`,
@@ -28,7 +34,15 @@ export const acl = async ({ parent, args, context, info }, next) => {
   const deleteMany = `deleteMany${context.moduleId}`;
   const upsertOne = `upsertOne${context.moduleId}`;
   if (aclTypes.includes(info.path.typename)) {
-    if (context.user.role === "ADMIN") return next();
+    if (context.user.role === "ADMIN") {
+      if (noAuthorTypes.includes(context.moduleId)) return next();
+      if (createOne === info.fieldName && !args.data.authorId && !args.data.author) {
+        args.data.authorId = context.user.id;
+      } else if (upsertOne === info.fieldName && !args.create.authorId && !args.create.author) {
+        args.create.authorId = context.user.id;
+      }
+      return next();
+    }
     const permissions = await prisma.roleAccess
       .findUnique({
         where: {
@@ -36,9 +50,27 @@ export const acl = async ({ parent, args, context, info }, next) => {
         },
       })
       .catch((err) => {
-        throw new Error(err.message);
+        throw err;
       });
     if (!permissions || !permissions.id) throw new Error("ACL problem!");
+    // Create type
+    if (createOne === info.fieldName) {
+      const hasCreateAccess = checkUserPermission("create", permissions);
+      if (hasCreateAccess && hasCreateAccess !== "NONE") {
+        if (!noAuthorTypes.includes(context.moduleId)) {
+          if(args.data.author || args.data.authorId){
+            throw new ApolloError("Forbidden!", "You can't manually set author");
+          }
+        }
+      }
+      if (!hasCreateAccess || hasCreateAccess === "NO") {
+        throw new ApolloError("Forbidden!", "Forbidden");
+      }
+      if (!noAuthorTypes.includes(context.moduleId)) {
+        args.data.authorId = context.user.id;
+      }
+      return next();
+    }
     // Read types
     if (readTypes.includes(info.fieldName)) {
       const hasReadAccess = checkUserPermission("read", permissions);
@@ -86,6 +118,13 @@ export const acl = async ({ parent, args, context, info }, next) => {
     // Update types
     if (updateMany === info.fieldName) {
       const hasUpdateAccess = checkUserPermission("update", permissions);
+      if (hasUpdateAccess && hasUpdateAccess !== "NONE") {
+        if (!noAuthorTypes.includes(context.moduleId)) {
+          if(args.data.author || args.data.authorId){
+            throw new ApolloError("Forbidden!", "You can't update author");
+          }
+        }
+      }
       if (!hasUpdateAccess || hasUpdateAccess === "NONE") {
         throw new ApolloError("Forbidden!", "Forbidden");
       } else if (hasUpdateAccess === "OWN") {
@@ -109,12 +148,16 @@ export const acl = async ({ parent, args, context, info }, next) => {
     }
     if (updateOne === info.fieldName) {
       const hasUpdateAccess = checkUserPermission("update", permissions);
+      if (hasUpdateAccess && hasUpdateAccess !== "NONE") {
+        if (!noAuthorTypes.includes(context.moduleId)) {
+          if(args.data.author || args.data.authorId){
+            throw new ApolloError("Forbidden!", "You can't update author");
+          }
+        }
+      }
       if (!hasUpdateAccess || hasUpdateAccess === "NONE") {
         throw new ApolloError("Forbidden!", "Forbidden");
       } else if (hasUpdateAccess === "OWN") {
-        if (context.moduleId !== "User") {
-          args.select.authorId = true;
-        }
         const item = await prisma[
           context.moduleId.charAt(0).toLowerCase() + context.moduleId.slice(1)
         ]
@@ -123,10 +166,10 @@ export const acl = async ({ parent, args, context, info }, next) => {
             rejectOnNotFound: true,
           })
           .catch((err) => {
-            throw new Error(err);
+            throw err;
           });
         if (
-          (item && item.authorId === context.user.id) ||
+          (item && item.authorId && item.authorId === context.user.id) ||
           (context.moduleId === "User" && item && item.id === context.user.id)
         ) {
           return next();
@@ -134,6 +177,55 @@ export const acl = async ({ parent, args, context, info }, next) => {
           throw new ApolloError("Forbidden!", "Forbidden");
         }
       } else if (hasUpdateAccess === "ALL") {
+        return next();
+      }
+    }
+
+    // Upsert type
+    if (upsertOne === info.fieldName) {
+      const hasUpdateAccess = checkUserPermission("update", permissions);
+      const hasCreateAccess = checkUserPermission("create", permissions);
+      if (hasCreateAccess === "YES") {
+        if (!noAuthorTypes.includes(context.moduleId)) {
+          if(args.create.author || args.create.authorId){
+            throw new ApolloError("Forbidden!", "You can't manually set author");
+          }
+          args.create.authorId = context.user.id;
+        }
+      } else if (hasUpdateAccess && hasUpdateAccess !== "NONE") {
+        if (!noAuthorTypes.includes(context.moduleId)) {
+          if(args.update.author || args.update.authorId){
+            throw new ApolloError("Forbidden!", "You can't update author");
+          }
+        }
+      }
+      if (
+        !hasUpdateAccess ||
+        hasUpdateAccess === "NONE" ||
+        !hasCreateAccess ||
+        hasCreateAccess !== "YES"
+      ) {
+        throw new ApolloError("Forbidden!", "Forbidden");
+      } else if (hasUpdateAccess === "OWN") {
+        const item = await prisma[
+          context.moduleId.charAt(0).toLowerCase() + context.moduleId.slice(1)
+        ]
+          .findUnique({
+            where: args.where,
+            rejectOnNotFound: false,
+          })
+          .catch((err) => {
+            throw err;
+          });
+        if (
+          (item && item.authorId && item.authorId === context.user.id) ||
+          (context.moduleId === "User" && item && item.id === context.user.id)
+        ) {
+          return next();
+        } else {
+          throw new ApolloError("Forbidden!", "Forbidden");
+        }
+      } else if (hasUpdateAccess === "ALL" && hasCreateAccess === "YES") {
         return next();
       }
     }
@@ -179,7 +271,7 @@ export const acl = async ({ parent, args, context, info }, next) => {
             rejectOnNotFound: true,
           })
           .catch((err) => {
-            throw new Error(err);
+            throw err;
           });
         if (
           (item && item.authorId === context.user.id) ||
