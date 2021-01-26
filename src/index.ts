@@ -24,6 +24,7 @@ const server = new ApolloServer({
         user = await prisma.user
           .findUnique({
             where: { id: userId },
+            rejectOnNotFound: true,
             select: {
               id: true,
               email: true,
@@ -35,7 +36,7 @@ const server = new ApolloServer({
             },
           })
           .catch((err) => {
-            throw new Error(err);
+            throw err;
           });
       }
     }
