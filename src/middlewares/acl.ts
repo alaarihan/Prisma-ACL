@@ -22,13 +22,13 @@ export const acl = async ({ parent, args, context, info }, next) => {
   if (context.moduleId === "Auth") return next();
 
   if (aclTypes.includes(info.path.typename)) {
-    return checkACL(args, info, context.moduleId, context.user, next);
+    return checkAcl(args, info, context.user, context.moduleId, next);
   } else {
     return next();
   }
 };
 
-async function checkACL(args, info, moduleId, user, next) {
+async function checkAcl(args, info, user, moduleId, next) {
   const operationModel = moduleId.charAt(0).toLowerCase() + moduleId.slice(1);
   const noAuthorTypes = ["User", "RoleAccess", "Category"];
   const createOne = `createOne${moduleId}`;
@@ -63,17 +63,20 @@ async function checkACL(args, info, moduleId, user, next) {
     }
     return next();
   }
+  /* restrict relational selected fields */
+  args.select = await applySelectRelationsAcl(args, user, moduleId);
+
   /* Other roles */
   const permissions = await prisma.roleAccess
     .findUnique({
       where: {
         role_type: { role: user.role, type: moduleId },
       },
+      rejectOnNotFound: true,
     })
     .catch((err) => {
       throw err;
     });
-  if (!permissions || !permissions.id) throw new Error("ACL problem!");
   /* Create type */
   if (createOne === info.fieldName) {
     const hasCreateAccess = checkUserPermission("create", permissions);
@@ -96,30 +99,11 @@ async function checkACL(args, info, moduleId, user, next) {
   /* Read types */
   if (readTypes.includes(info.fieldName)) {
     const hasReadAccess = checkUserPermission("read", permissions);
-    if (!hasReadAccess || hasReadAccess === "NONE") {
+    if (hasReadAccess === "OWN" && moduleId === "User") {
       throw new ApolloError("Forbidden!", "Forbidden");
-    } else if (hasReadAccess === "OWN") {
-      if (moduleId === "User") {
-        throw new ApolloError("Forbidden!", "Forbidden");
-      } else {
-        if (!args.where) {
-          args.where = {};
-        }
-        if (!args.where.AND) {
-          args.where.AND = [];
-        }
-        if (!args.where.AND[1]) {
-          args.where.AND[1] = {};
-        }
-        if (!args.where.AND[1].authorId) {
-          args.where.AND[1].authorId = {};
-        }
-        args.where.AND[1].authorId.equals = user.id;
-        return next();
-      }
-    } else if (hasReadAccess === "ALL") {
-      return next();
     }
+    args = applyReadAcl(args, user, hasReadAccess);
+    return next();
   }
   if (uniqueReadType === info.fieldName) {
     const hasReadAccess = checkUserPermission("read", permissions);
@@ -303,4 +287,61 @@ async function checkACL(args, info, moduleId, user, next) {
       return next();
     }
   }
+}
+function applyReadAcl(args, user, hasReadAccess) {
+  if (hasReadAccess === "OWN") {
+    if (!args.where) {
+      args.where = {};
+    }
+    if (!args.where.AND) {
+      args.where.AND = [];
+    }
+    if (!args.where.AND[1]) {
+      args.where.AND[1] = {};
+    }
+    if (!args.where.AND[1].authorId) {
+      args.where.AND[1].authorId = {};
+    }
+    args.where.AND[1].authorId.equals = user.id;
+    return args;
+  } else if (hasReadAccess === "ALL") {
+    return args;
+  } else {
+    throw new ApolloError("Forbidden!", "Forbidden");
+  }
+}
+
+async function applySelectRelationsAcl(args, user, moduleId) {
+  for (const [key, value] of Object.entries(args.select)) {
+    if (typeof value === "object") {
+      const prismaModel = dataModel.models.find(
+        (item) => item.name === moduleId
+      );
+      if (!prismaModel || !prismaModel.fields) return;
+      const relationField = prismaModel.fields.find(
+        (item) => item.name === key
+      );
+      if (!relationField) return;
+      const permissions = await prisma.roleAccess
+        .findUnique({
+          where: {
+            role_type: { role: user.role, type: relationField.type },
+          },
+          rejectOnNotFound: true,
+        })
+        .catch((err) => {
+          throw err;
+        });
+      const hasReadAccess = checkUserPermission("read", permissions);
+      if (relationField.isList) {
+        args.select[key] = applyReadAcl(args.select[key], user, hasReadAccess);
+      }
+      args.select[key].select = await applySelectRelationsAcl(
+        args.select[key],
+        user,
+        relationField.type
+      );
+    }
+  }
+  return args.select;
 }
