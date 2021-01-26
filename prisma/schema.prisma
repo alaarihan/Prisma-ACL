@@ -20,7 +20,7 @@ model User {
   dateOfBirth       DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-  Log               Log[]
+  logs              Log[]
 }
 
 enum UserRole {

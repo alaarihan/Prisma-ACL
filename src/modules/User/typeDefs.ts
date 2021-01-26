@@ -64,4 +64,8 @@ export default gql`
       data: UserUpdateManyMutationInput
     ): BatchPayload
   }
+
+  extend type Log {
+    author: User
+  }
 `
