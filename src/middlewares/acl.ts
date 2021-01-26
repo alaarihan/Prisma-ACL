@@ -21,7 +21,7 @@ export const acl = async ({ parent, args, context, info }, next) => {
   if (context.moduleId === "Auth") return next();
   const operationModel =
     context.moduleId.charAt(0).toLowerCase() + context.moduleId.slice(1);
-  const noAuthorTypes = ["User", "RoleAccess"];
+  const noAuthorTypes = ["User", "RoleAccess", "Category"];
   const createOne = `createOne${context.moduleId}`;
   const uniqueReadType = `findUnique${context.moduleId}`;
   const readTypes = [
@@ -39,7 +39,7 @@ export const acl = async ({ parent, args, context, info }, next) => {
     /* Admin role */
     if (context.user.role === "ADMIN") {
       if (noAuthorTypes.includes(context.moduleId)) return next();
-      // Auto populate the author if not manually field by admin
+      // Auto populate the author if not manually populated by admin
       if (
         createOne === info.fieldName &&
         !args.data.authorId &&
