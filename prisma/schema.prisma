@@ -20,6 +20,7 @@ model User {
   dateOfBirth       DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+  Log               Log[]
 }
 
 enum UserRole {
@@ -57,6 +58,7 @@ model Log {
   host      String
   userAgent String
   authorId  Int?
+  author    User?    @relation(references: [id], fields: [authorId])
   referer   String?
   createdAt DateTime @default(now())
 }

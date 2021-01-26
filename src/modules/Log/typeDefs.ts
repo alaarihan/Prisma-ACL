@@ -4,6 +4,7 @@ export default gql`
   type Log {
     id: Int!
     authorId: Int
+    author: User
     operation: String
     message: String
     ip: String!
