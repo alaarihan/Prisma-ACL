@@ -7,10 +7,22 @@ import { AuthModule } from "./auth/auth.module";
 import { addSelect } from "./addSelect";
 import { jwtAuth } from "../middlewares/jwtAuth";
 import { acl } from "../middlewares/acl";
+import { SalatModule } from "./Salat/Salat.module";
+import { PostModule } from "./Post/Post.module";
+import { CategoryModule } from "./Category/Category.module";
 // import { logger } from '../middlewares/logger'
 
 export const application = createApplication({
-  modules: [InputsModule, AuthModule, LogModule, UserModule, RoleAccessModule],
+  modules: [
+    InputsModule,
+    AuthModule,
+    LogModule,
+    UserModule,
+    RoleAccessModule,
+    SalatModule,
+    PostModule,
+    CategoryModule,
+  ],
   middlewares: {
     "*": { "*": [jwtAuth, addSelect, acl] },
   },
