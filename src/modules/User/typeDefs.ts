@@ -9,9 +9,21 @@ export default gql`
     role: UserRole!
     country: String
     dandaraCenter: String
-    dateofBirth: DateTime
+    dateOfBirth: DateTime
     createdAt: DateTime!
     updatedAt: DateTime!
+  }
+
+  extend type Log {
+    author: User
+  }
+
+  extend type Salat {
+    author: User
+  }
+
+  extend type Post {
+    author: User
   }
 
   extend type Query {
@@ -63,9 +75,5 @@ export default gql`
       where: UserWhereInput
       data: UserUpdateManyMutationInput
     ): BatchPayload
-  }
-
-  extend type Log {
-    author: User
   }
 `

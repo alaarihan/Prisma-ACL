@@ -1,4 +1,4 @@
-import { gql } from 'graphql-modules'
+import { gql } from "graphql-modules";
 
 export default gql`
   type RoleAccess {
@@ -14,9 +14,7 @@ export default gql`
   }
 
   extend type Query {
-    findUniqueRoleAccess(
-      where: RoleAccessWhereUniqueInput!
-    ): RoleAccess
+    findUniqueRoleAccess(where: RoleAccessWhereUniqueInput!): RoleAccess
     findFirstRoleAccess(
       where: RoleAccessWhereInput
       orderBy: [RoleAccessOrderByInput!]
@@ -51,16 +49,12 @@ export default gql`
     ): AggregateRoleAccess
   }
   extend type Mutation {
-    createOneRoleAccess(
-      data: RoleAccessCreateInput!
-    ): RoleAccess!
+    createOneRoleAccess(data: RoleAccessCreateInput!): RoleAccess!
     updateOneRoleAccess(
       where: RoleAccessWhereUniqueInput!
       data: RoleAccessUpdateInput!
     ): RoleAccess!
-    deleteOneRoleAccess(
-      where: RoleAccessWhereUniqueInput!
-    ): RoleAccess
+    deleteOneRoleAccess(where: RoleAccessWhereUniqueInput!): RoleAccess
     upsertOneRoleAccess(
       where: RoleAccessWhereUniqueInput!
       create: RoleAccessCreateInput!
@@ -72,4 +66,4 @@ export default gql`
       data: RoleAccessUpdateManyMutationInput
     ): BatchPayload
   }
-`
+`;

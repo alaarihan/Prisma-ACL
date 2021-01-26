@@ -1,16 +1,27 @@
-import { gql } from 'graphql-modules'
+import { gql } from "graphql-modules";
 
 export default gql`
   type Log {
     id: Int!
-    authorId: Int
     operation: String
     message: String
     ip: String!
     host: String!
     userAgent: String!
+    authorId: Int
     referer: String
     createdAt: DateTime!
+  }
+
+  extend type User {
+    logs(
+      where: LogWhereInput
+      orderBy: LogOrderByInput
+      cursor: LogWhereUniqueInput
+      take: Int
+      skip: Int
+      distinct: LogScalarFieldEnum
+    ): [Log!]!
   }
 
   extend type Query {
@@ -63,7 +74,4 @@ export default gql`
       data: LogUpdateManyMutationInput
     ): BatchPayload
   }
-  extend type User {
-    logs: [Log!]
-  }
-`
+`;

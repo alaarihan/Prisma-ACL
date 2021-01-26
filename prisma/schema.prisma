@@ -21,6 +21,8 @@ model User {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   logs              Log[]
+  salawat           Salat[]
+  posts              Post[]
 }
 
 enum UserRole {
@@ -61,4 +63,40 @@ model Log {
   author    User?    @relation(references: [id], fields: [authorId])
   referer   String?
   createdAt DateTime @default(now())
+}
+
+model Salat {
+  id        Int       @id @default(autoincrement())
+  authorId  Int?
+  author    User?     @relation(references: [id], fields: [authorId])
+  name      SalatName
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+enum SalatName {
+  FAJR
+  ZUHR
+  ASR
+  MAGHRIB
+  ISHAA
+}
+
+model Post {
+  id         Int        @id @default(autoincrement())
+  authorId   Int?
+  author     User?      @relation(references: [id], fields: [authorId])
+  name       String
+  content    String?
+  categories Category[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  name      String
+  posts     Post[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
