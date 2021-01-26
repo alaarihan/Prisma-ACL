@@ -3,7 +3,7 @@ import { prisma } from "../common/prisma";
 
 function checkUserPermission(permission, permissions) {
   const hasAccess = permissions[permission];
-  if (!hasAccess || hasAccess === "NONE") {
+  if (hasAccess === "NONE") {
     return "NONE";
   } else if (hasAccess === "ALL") {
     return "ALL";
@@ -56,15 +56,15 @@ export const acl = async ({ parent, args, context, info }, next) => {
     // Create type
     if (createOne === info.fieldName) {
       const hasCreateAccess = checkUserPermission("create", permissions);
+      if (!hasCreateAccess || hasCreateAccess === "NO") {
+        throw new ApolloError("Forbidden!", "Forbidden");
+      }
       if (hasCreateAccess && hasCreateAccess !== "NONE") {
         if (!noAuthorTypes.includes(context.moduleId)) {
           if(args.data.author || args.data.authorId){
-            throw new ApolloError("Forbidden", "You can't manually set author!");
+            throw new ApolloError("You can't manually set author!", "Forbidden");
           }
         }
-      }
-      if (!hasCreateAccess || hasCreateAccess === "NO") {
-        throw new ApolloError("Forbidden", "Forbidden!");
       }
       if (!noAuthorTypes.includes(context.moduleId)) {
         args.data.authorId = context.user.id;
@@ -75,10 +75,10 @@ export const acl = async ({ parent, args, context, info }, next) => {
     if (readTypes.includes(info.fieldName)) {
       const hasReadAccess = checkUserPermission("read", permissions);
       if (!hasReadAccess || hasReadAccess === "NONE") {
-        throw new ApolloError("Forbidden", "Forbidden!");
+        throw new ApolloError("Forbidden!", "Forbidden");
       } else if (hasReadAccess === "OWN") {
         if (context.moduleId === "User") {
-          throw new ApolloError("Forbidden", "Forbidden!");
+          throw new ApolloError("Forbidden!", "Forbidden");
         } else {
           if (!args.where) {
             args.where = {};
@@ -102,7 +102,7 @@ export const acl = async ({ parent, args, context, info }, next) => {
     if (uniqueReadType === info.fieldName) {
       const hasReadAccess = checkUserPermission("read", permissions);
       if (!hasReadAccess || hasReadAccess === "NONE") {
-        throw new ApolloError("Forbidden", "Forbidden!");
+        throw new ApolloError("Forbidden!", "Forbidden");
       } else if (hasReadAccess === "OWN") {
         args.select.authorId = true;
         const item = await next();
@@ -121,12 +121,12 @@ export const acl = async ({ parent, args, context, info }, next) => {
       if (hasUpdateAccess && hasUpdateAccess !== "NONE") {
         if (!noAuthorTypes.includes(context.moduleId)) {
           if(args.data.author || args.data.authorId){
-            throw new ApolloError("Forbidden", "You can't update author!");
+            throw new ApolloError("You can't update author!", "Forbidden");
           }
         }
       }
       if (!hasUpdateAccess || hasUpdateAccess === "NONE") {
-        throw new ApolloError("Forbidden", "Forbidden!");
+        throw new ApolloError("Forbidden!", "Forbidden");
       } else if (hasUpdateAccess === "OWN") {
         if (!args.where) {
           args.where = {};
@@ -151,12 +151,12 @@ export const acl = async ({ parent, args, context, info }, next) => {
       if (hasUpdateAccess && hasUpdateAccess !== "NONE") {
         if (!noAuthorTypes.includes(context.moduleId)) {
           if(args.data.author || args.data.authorId){
-            throw new ApolloError("Forbidden", "You can't update author!");
+            throw new ApolloError("You can't update author!", "Forbidden");
           }
         }
       }
       if (!hasUpdateAccess || hasUpdateAccess === "NONE") {
-        throw new ApolloError("Forbidden", "Forbidden!");
+        throw new ApolloError("Forbidden!", "Forbidden");
       } else if (hasUpdateAccess === "OWN") {
         const item = await prisma[
           context.moduleId.charAt(0).toLowerCase() + context.moduleId.slice(1)
@@ -174,7 +174,7 @@ export const acl = async ({ parent, args, context, info }, next) => {
         ) {
           return next();
         } else {
-          throw new ApolloError("Forbidden", "Forbidden!");
+          throw new ApolloError("Forbidden!", "Forbidden");
         }
       } else if (hasUpdateAccess === "ALL") {
         return next();
@@ -188,14 +188,14 @@ export const acl = async ({ parent, args, context, info }, next) => {
       if (hasCreateAccess === "YES") {
         if (!noAuthorTypes.includes(context.moduleId)) {
           if(args.create.author || args.create.authorId){
-            throw new ApolloError("Forbidden", "You can't manually set author!");
+            throw new ApolloError("You can't manually set author!", "Forbidden");
           }
           args.create.authorId = context.user.id;
         }
       } else if (hasUpdateAccess && hasUpdateAccess !== "NONE") {
         if (!noAuthorTypes.includes(context.moduleId)) {
           if(args.update.author || args.update.authorId){
-            throw new ApolloError("Forbidden", "You can't update author!");
+            throw new ApolloError("You can't update author!", "Forbidden");
           }
         }
       }
@@ -205,7 +205,7 @@ export const acl = async ({ parent, args, context, info }, next) => {
         !hasCreateAccess ||
         hasCreateAccess !== "YES"
       ) {
-        throw new ApolloError("Forbidden", "Forbidden!");
+        throw new ApolloError("Forbidden!", "Forbidden");
       } else if (hasUpdateAccess === "OWN") {
         const item = await prisma[
           context.moduleId.charAt(0).toLowerCase() + context.moduleId.slice(1)
@@ -223,7 +223,7 @@ export const acl = async ({ parent, args, context, info }, next) => {
         ) {
           return next();
         } else {
-          throw new ApolloError("Forbidden", "Forbidden!");
+          throw new ApolloError("Forbidden!", "Forbidden");
         }
       } else if (hasUpdateAccess === "ALL" && hasCreateAccess === "YES") {
         return next();
@@ -234,10 +234,10 @@ export const acl = async ({ parent, args, context, info }, next) => {
     if (deleteMany === info.fieldName) {
       const hasDeleteAccess = checkUserPermission("delete", permissions);
       if (!hasDeleteAccess || hasDeleteAccess === "NONE") {
-        throw new ApolloError("Forbidden", "Forbidden!");
+        throw new ApolloError("Forbidden!", "Forbidden");
       } else if (hasDeleteAccess === "OWN") {
         if (context.moduleId === "User")
-          throw new ApolloError("Forbidden", "Forbidden!");
+          throw new ApolloError("Forbidden!", "Forbidden");
         if (!args.where) {
           args.where = {};
         }
@@ -259,10 +259,10 @@ export const acl = async ({ parent, args, context, info }, next) => {
     if (deleteOne === info.fieldName) {
       const hasDeleteAccess = checkUserPermission("delete", permissions);
       if (!hasDeleteAccess || hasDeleteAccess === "NONE") {
-        throw new ApolloError("Forbidden", "Forbidden!");
+        throw new ApolloError("Forbidden!", "Forbidden");
       } else if (hasDeleteAccess === "OWN") {
         if (context.moduleId === "User")
-          throw new ApolloError("Forbidden", "Forbidden!");
+          throw new ApolloError("Forbidden!", "Forbidden");
         const item = await prisma[
           context.moduleId.charAt(0).toLowerCase() + context.moduleId.slice(1)
         ]
@@ -279,7 +279,7 @@ export const acl = async ({ parent, args, context, info }, next) => {
         ) {
           return next();
         } else {
-          throw new ApolloError("Forbidden", "Forbidden!");
+          throw new ApolloError("Forbidden!", "Forbidden");
         }
       } else if (hasDeleteAccess === "ALL") {
         return next();
