@@ -1,5 +1,5 @@
 import { ApolloError } from "apollo-server-express";
-import { dataModel, DMMF } from "../../tools/schema";
+import { dataModel, schema } from "../../tools/schema";
 import { prisma } from "../common/prisma";
 
 function checkUserPermission(permission, permissions) {
@@ -63,31 +63,51 @@ async function checkAcl(args, info, user, moduleId, next) {
   }
 
   /* Other roles */
-  const queryModels = getNestedSelectedModels(moduleId, args.select);
-  const queryTypes = queryModels.map((item) => item.type);
+  let dataModels = [];
+  const selectedModels = getNestedSelectedModels(moduleId, args.select);
+  dataModels = getNestedDataModels(moduleId, args.data);
+  const queryTypes = [
+    moduleId,
+    ...selectedModels.map((item) => item.type),
+    ...dataModels.map((item) => item.type),
+  ];
+  console.log(queryTypes);
   const allPermissions = await getUserPermissionsForTypes(
     queryTypes,
     user.role
-  );
-  /* restrict relational selected fields */
-  args.select = applySelectArrayRelationsAcl(
-    args,
-    user,
-    moduleId,
-    allPermissions
   );
   const permissions = allPermissions.find((item) => item.type === moduleId);
   if (!permissions) throw new Error("Error in ACL!");
   /* Create type */
   if (createOne === info.fieldName) {
-    args = applyCreateAcl(args, user, moduleId, permissions);
+    args.data = applyCreateAcl(args.data, user, moduleId, permissions);
+    args.data = applyCreateOneRelationsAcl(
+      args.data,
+      user,
+      moduleId,
+      allPermissions
+    );
   }
   /* Read types */
   if (readTypes.includes(info.fieldName)) {
     args = applyReadAcl(args, user, moduleId, permissions);
+    /* restrict relational selected fields */
+    args.select = applySelectArrayRelationsAcl(
+      args,
+      user,
+      moduleId,
+      allPermissions
+    );
   }
   if (uniqueReadType === info.fieldName) {
     args = applyUniqueReadAcl(args, permissions);
+    /* restrict relational selected fields */
+    args.select = applySelectArrayRelationsAcl(
+      args,
+      user,
+      moduleId,
+      allPermissions
+    );
   }
   /* Update types */
   if (updateMany === info.fieldName) {
@@ -113,7 +133,7 @@ async function checkAcl(args, info, user, moduleId, next) {
   if (uniqueReadType === info.fieldName) {
     results = applyUniqueReadOwnAcl(user, results);
   }
-  results = applyObjectRelationsAcl(user, moduleId, allPermissions, results)
+  results = applyObjectRelationsAcl(user, moduleId, allPermissions, results);
   return results;
 }
 
@@ -122,16 +142,16 @@ function applyCreateAcl(args, user, moduleId, permissions) {
   if (!hasCreateAccess || hasCreateAccess === "NO") {
     throw new ApolloError("Forbidden!", "Forbidden");
   }
-  if (hasCreateAccess && hasCreateAccess !== "NONE") {
+  if (hasCreateAccess === "YES") {
     if (!noAuthorTypes.includes(moduleId)) {
-      if (args.data.author || args.data.authorId) {
+      if (args.author || args.authorId) {
         throw new ApolloError("You can't manually set author!", "Forbidden");
       }
     }
   }
   // Auto populate the author
   if (!noAuthorTypes.includes(moduleId)) {
-    args.data.authorId = user.id;
+    args.authorId = user.id;
   }
   return args;
 }
@@ -373,7 +393,7 @@ function applySelectArrayRelationsAcl(args, user, moduleId, allPermissions) {
 
 function applyObjectRelationsAcl(user, moduleId, allPermissions, data) {
   if (data && !Array.isArray(data))
-    data = applyOneObjectRelationsAcl(data, user, moduleId, allPermissions);
+    data = applyOneObjectRelationsAcl(user, moduleId, allPermissions, data);
   else
     for (let index = 0; index < data.length; index++) {
       data[index] = applyOneObjectRelationsAcl(
@@ -444,6 +464,33 @@ function getNestedSelectedModels(moduleId, select, models = []) {
   return models;
 }
 
+function getNestedDataModels(moduleId, data, models = []) {
+  if (Array.isArray(data)) {
+    for (let index = 0; index < data.length; index++) {
+      models = getOneNestedDataModels(moduleId, data[index], models);
+    }
+  } else {
+    models = getOneNestedDataModels(moduleId, data, models);
+  }
+
+  return models;
+}
+
+function getOneNestedDataModels(moduleId, data, models) {
+  for (const [key, value] of Object.entries(data)) {
+    const prismaModel = dataModel.models.find((item) => item.name === moduleId);
+    if (!prismaModel) continue;
+    const relationField = prismaModel.fields.find((item) => item.name === key);
+    if (!relationField) continue;
+    if (relationField && relationField.kind === "object") {
+      if (!models.find((item) => item.type === relationField.type))
+        models.push(relationField);
+      models = getNestedDataModels(relationField.type, data[key], models);
+    }
+  }
+  return models;
+}
+
 async function getUserPermissionsForTypes(types, userRole) {
   const permissions = await prisma.roleAccess
     .findMany({
@@ -456,4 +503,54 @@ async function getUserPermissionsForTypes(types, userRole) {
       throw err;
     });
   return permissions;
+}
+
+function applyCreateOneRelationsAcl(args, user, moduleId, allPermissions) {
+  for (const [key, value] of Object.entries(args)) {
+    if (typeof value === "object") {
+      const prismaModel = dataModel.models.find(
+        (item) => item.name === moduleId
+      );
+      if (!prismaModel) continue;
+
+      const relationField = prismaModel.fields.find(
+        (item) => item.name === key
+      );
+      if (!relationField) continue;
+      const permissions = allPermissions.find(
+        (item) => item.type === relationField.type
+      );
+      if (!permissions) throw new Error("Error in ACL!");
+      if (args[key].create) {
+        args[key].create = applyCreateAcl(
+          args[key].create,
+          user,
+          relationField.type,
+          permissions
+        );
+        args[key].create = applyCreateOneRelationsAcl(
+          args[key].create,
+          user,
+          relationField.type,
+          allPermissions
+        );
+      }
+      if (args[key].connectOrCreate?.create) {
+        args[key].connectOrCreate.create = applyCreateAcl(
+          args[key].connectOrCreate.create,
+          user,
+          relationField.type,
+          permissions
+        );
+        args[key].connectOrCreate.create = applyCreateOneRelationsAcl(
+          args[key].connectOrCreate.create,
+          user,
+          relationField.type,
+          allPermissions
+        );
+      }
+    }
+  }
+  console.log(args);
+  return args;
 }
