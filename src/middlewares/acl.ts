@@ -61,7 +61,7 @@ async function checkAcl(args, info, user, moduleId, next) {
     }
     return next();
   }
-  
+
   /* Other roles */
   const queryModels = getNestedSelectedModels(moduleId, args.select);
   const queryTypes = queryModels.map((item) => item.type);
@@ -113,6 +113,7 @@ async function checkAcl(args, info, user, moduleId, next) {
   if (uniqueReadType === info.fieldName) {
     results = applyUniqueReadOwnAcl(user, results);
   }
+  results = applyObjectRelationsAcl(user, moduleId, allPermissions, results)
   return results;
 }
 
@@ -370,32 +371,30 @@ function applySelectArrayRelationsAcl(args, user, moduleId, allPermissions) {
   return args.select;
 }
 
-function applyObjectRelationsAcl(data, user, moduleId, allPermissions) {
+function applyObjectRelationsAcl(user, moduleId, allPermissions, data) {
   if (data && !Array.isArray(data))
     data = applyOneObjectRelationsAcl(data, user, moduleId, allPermissions);
   else
     for (let index = 0; index < data.length; index++) {
       data[index] = applyOneObjectRelationsAcl(
-        data,
         user,
         moduleId,
-        allPermissions
+        allPermissions,
+        data[index]
       );
     }
   return data;
 }
 
-function applyOneObjectRelationsAcl(data, user, moduleId, allPermissions) {
+function applyOneObjectRelationsAcl(user, moduleId, allPermissions, data) {
   for (const [key, value] of Object.entries(data)) {
     if (typeof value === "object") {
       const prismaModel = dataModel.models.find(
         (item) => item.name === moduleId
       );
-      if (!prismaModel || !prismaModel.fields) continue;
       const relationField = prismaModel.fields.find(
         (item) => item.name === key
       );
-      if (!relationField) continue;
       const permissions = allPermissions.find(
         (item) => item.type === relationField.type
       );
@@ -411,11 +410,18 @@ function applyOneObjectRelationsAcl(data, user, moduleId, allPermissions) {
           data[key].authorId &&
           data[key].authorId !== user.id
         ) {
-          delete data[key];
+          data[key] = null;
         } else {
           throw new ApolloError("Forbidden!", "Forbidden");
         }
       }
+      if (typeof data[key] === "object")
+        data[key] = applyObjectRelationsAcl(
+          user,
+          relationField.type,
+          allPermissions,
+          data[key]
+        );
     }
   }
   return data;
@@ -428,7 +434,11 @@ function getNestedSelectedModels(moduleId, select, models = []) {
     if (relationField && relationField.kind === "object") {
       if (!models.find((item) => item.type === relationField.type))
         models.push(relationField);
-        models = getNestedSelectedModels(relationField.type, select[key].select, models)
+      models = getNestedSelectedModels(
+        relationField.type,
+        select[key].select,
+        models
+      );
     }
   }
   return models;
