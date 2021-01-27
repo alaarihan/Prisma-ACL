@@ -71,7 +71,6 @@ async function checkAcl(args, info, user, moduleId, next) {
     ...selectedModels.map((item) => item.type),
     ...dataModels.map((item) => item.type),
   ];
-  console.log(queryTypes);
   const allPermissions = await getUserPermissionsForTypes(
     queryTypes,
     user.role
@@ -143,15 +142,32 @@ function applyCreateAcl(args, user, moduleId, permissions) {
     throw new ApolloError("Forbidden!", "Forbidden");
   }
   if (hasCreateAccess === "YES") {
+    // Prevent manually populating the author
     if (!noAuthorTypes.includes(moduleId)) {
-      if (args.author || args.authorId) {
+      if (Array.isArray(args)) {
+        args.forEach((item) => {
+          if (item.author || item.authorId) {
+            throw new ApolloError(
+              "You can't manually set author!",
+              "Forbidden"
+            );
+          }
+        });
+      } else if (args.author || args.authorId) {
         throw new ApolloError("You can't manually set author!", "Forbidden");
       }
     }
   }
   // Auto populate the author
   if (!noAuthorTypes.includes(moduleId)) {
-    args.authorId = user.id;
+    if (Array.isArray(args)) {
+      args = args.map((item) => {
+        item.authorId = user.id;
+        return item;
+      });
+    } else {
+      args.authorId = user.id;
+    }
   }
   return args;
 }
@@ -551,6 +567,5 @@ function applyCreateOneRelationsAcl(args, user, moduleId, allPermissions) {
       }
     }
   }
-  console.log(args);
   return args;
 }
