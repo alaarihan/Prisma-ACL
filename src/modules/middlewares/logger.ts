@@ -1,4 +1,4 @@
-import { prisma } from "../common/prisma";
+import { prisma } from "../../common/prisma";
 
 export const logger = async ({ parent, context, info }, next) => {
   const logTypes = ["Query", "Mutation"];

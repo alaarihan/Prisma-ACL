@@ -1,7 +1,7 @@
 import { ApolloError } from "apollo-server-express";
 import { hash } from "bcrypt";
-import { dataModel, schema } from "../../tools/schema";
-import { prisma } from "../common/prisma";
+import { dataModel, schema } from "../../../tools/schema";
+import { prisma } from "../../common/prisma";
 
 function checkUserPermission(permission, permissions) {
   const hasAccess = permissions[permission];
