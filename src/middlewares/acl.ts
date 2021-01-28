@@ -60,6 +60,14 @@ async function checkAcl(args, info, user, moduleId, next) {
     ) {
       args.create.authorId = user.id;
     }
+    // Auto hash password when create or update author field
+    if (args.data) {
+      args.data = await hashPasswordInData(args.data);
+    } else if (args.create) {
+      args.create = await hashPasswordInData(args.create);
+    } else if (args.update) {
+      args.update = await hashPasswordInData(args.update);
+    }
     return next();
   }
 
@@ -698,4 +706,48 @@ function getRelationField(moduleId, name) {
   if (!prismaModel) return;
   const relationField = prismaModel.fields.find((item) => item.name === name);
   return relationField;
+}
+
+async function hashPasswordInData(data) {
+  if (!data) return data;
+  if (data && Array.isArray(data)) {
+    for (let index = 0; index < data.length; index++) {}
+  } else if (typeof data === "object") {
+    if (typeof data === "object") {
+      data = await hashPasswordInObject(data);
+    }
+  }
+  return data;
+}
+
+async function hashPasswordInObject(data) {
+  for (const [key, value] of Object.entries(data)) {
+    if (key === "author") {
+      if (data[key]?.create?.password) {
+        data[key].create.password = await hash(data[key].create.password, 10);
+      } else if (data[key]?.update?.password) {
+        data[key].update.password = await hash(data[key].update.password, 10);
+      } else if (data[key]?.connectOrCreate?.create?.password) {
+        data[key].connectOrCreate.create.password = await hash(
+          data[key].connectOrCreate.create.password,
+          10
+        );
+      } else if (data[key]?.upsert?.create?.password) {
+        data[key].upsert.create.password = await hash(
+          data[key].upsert.create.password,
+          10
+        );
+      } else if (data[key]?.upsert?.update?.password) {
+        data[key].upsert.update.password = await hash(
+          data[key].upsert.update.password,
+          10
+        );
+      }
+    } else if (Array.isArray(data[key])) {
+      data[key] = await hashPasswordInData(data[key]);
+    } else if (typeof data[key] === "object") {
+      data[key] = await hashPasswordInObject(data[key]);
+    }
+  }
+  return data;
 }
