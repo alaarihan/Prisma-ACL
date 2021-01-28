@@ -114,16 +114,34 @@ async function checkAcl(args, info, user, moduleId, next) {
   }
   if (updateOne === info.fieldName) {
     await applyUpdateOneAcl(args, user, moduleId, permissions);
+    args.data = await applyUpdateOneRelationsAcl(
+      args.data,
+      user,
+      moduleId,
+      allPermissions
+    );
   }
 
   /*  Upsert type */
   if (upsertOne === info.fieldName) {
     args = await applyUpsertOneAcl(args, user, moduleId, permissions);
+    args.create = applyCreateOneRelationsAcl(
+      args.create,
+      user,
+      moduleId,
+      allPermissions
+    );
+    args.update = await applyUpdateOneRelationsAcl(
+      args.update,
+      user,
+      moduleId,
+      allPermissions
+    );
   }
 
   // Delete types
   if (deleteMany === info.fieldName) {
-    args = applyDeleteManyAcl(args, user, moduleId, permissions);
+    args.where = applyDeleteManyAcl(args.where, user, moduleId, permissions);
   }
   if (deleteOne === info.fieldName) {
     await applyDeleteOneAcl(args, user, moduleId, permissions);
@@ -307,6 +325,7 @@ async function applyUpsertOneAcl(args, user, moduleId, permissions) {
         throw err;
       });
     if (
+      !item || // If the item not exist then it will be created so we pass
       (item && item.authorId && item.authorId === user.id) ||
       (moduleId === "User" && item && item.id === user.id)
     ) {
@@ -323,19 +342,19 @@ function applyDeleteManyAcl(args, user, moduleId, permissions) {
     throw new ApolloError("Forbidden!", "Forbidden");
   } else if (hasDeleteAccess === "OWN") {
     if (moduleId === "User") throw new ApolloError("Forbidden!", "Forbidden");
-    if (!args.where) {
-      args.where = {};
+    if (!args) {
+      args = {};
     }
-    if (!args.where.AND) {
-      args.where.AND = [];
+    if (!args.AND) {
+      args.AND = [];
     }
-    if (!args.where.AND[1]) {
-      args.where.AND[1] = {};
+    if (!args.AND[1]) {
+      args.AND[1] = {};
     }
-    if (!args.where.AND[1].authorId) {
-      args.where.AND[1].authorId = {};
+    if (!args.AND[1].authorId) {
+      args.AND[1].authorId = {};
     }
-    args.where.AND[1].authorId.equals = user.id;
+    args.AND[1].authorId.equals = user.id;
   }
   return args;
 }
@@ -564,6 +583,132 @@ function applyCreateOneRelationsAcl(args, user, moduleId, allPermissions) {
           relationField.type,
           allPermissions
         );
+      }
+    }
+  }
+  return args;
+}
+
+async function applyUpdateOneRelationsAcl(
+  args,
+  user,
+  moduleId,
+  allPermissions
+) {
+  for (const [key, value] of Object.entries(args)) {
+    if (typeof value === "object") {
+      const prismaModel = dataModel.models.find(
+        (item) => item.name === moduleId
+      );
+      if (!prismaModel) continue;
+
+      const relationField = prismaModel.fields.find(
+        (item) => item.name === key
+      );
+      if (!relationField) continue;
+      const permissions = allPermissions.find(
+        (item) => item.type === relationField.type
+      );
+      if (!permissions) throw new Error("Error in ACL!");
+      if (args[key].create) {
+        for (let index = 0; index < args[key].create.length; index++) {
+          args[key].create[index] = applyCreateAcl(
+            args[key].create[index],
+            user,
+            relationField.type,
+            permissions
+          );
+          args[key].create[index] = applyCreateOneRelationsAcl(
+            args[key].create[index],
+            user,
+            relationField.type,
+            allPermissions
+          );
+        }
+      }
+      if (args[key].connectOrCreate?.create) {
+        for (let index = 0; index < args[key].connectOrCreate.length; index++) {
+          args[key].connectOrCreate.create[index] = applyCreateAcl(
+            args[key].connectOrCreate.create[index],
+            user,
+            relationField.type,
+            permissions
+          );
+          args[key].connectOrCreate.create[index] = applyCreateOneRelationsAcl(
+            args[key].connectOrCreate.create[index],
+            user,
+            relationField.type,
+            allPermissions
+          );
+        }
+      }
+      if (args[key].delete) {
+        for (let index = 0; index < args[key].delete.length; index++) {
+          await applyDeleteOneAcl(
+            { where: args[key].delete[index] },
+            user,
+            relationField.type,
+            permissions
+          );
+        }
+      }
+      if (args[key].deleteMany) {
+        for (let index = 0; index < args[key].deleteMany.length; index++) {
+          args[key].deleteMany[index] = applyDeleteManyAcl(
+            args[key].deleteMany[index],
+            user,
+            relationField.type,
+            permissions
+          );
+        }
+      }
+      if (args[key].updateMany) {
+        for (let index = 0; index < args[key].updateMany.length; index++) {
+          args[key].updateMany[index] = applyUpdateManyAcl(
+            args[key].updateMany[index],
+            user,
+            relationField.type,
+            permissions
+          );
+        }
+      }
+      if (args[key].update) {
+        for (let index = 0; index < args[key].update.length; index++) {
+          await applyUpdateOneAcl(
+            args[key].update[index],
+            user,
+            relationField.type,
+            permissions
+          );
+          args[key].update[index] = await applyUpdateOneRelationsAcl(
+            args[key].update[index],
+            user,
+            relationField.type,
+            allPermissions
+          );
+        }
+      }
+      if (args[key].upsert) {
+        for (let index = 0; index < args[key].upsert.length; index++) {
+          args[key].upsert[index] = await applyUpsertOneAcl(
+            args[key].upsert[index],
+            user,
+            relationField.type,
+            permissions
+          );
+          args[key].upsert[index].create = applyCreateOneRelationsAcl(
+            args[key].upsert[index].create,
+            user,
+            relationField.type,
+            allPermissions
+          );
+          args[key].upsert[index].update = await applyUpdateOneRelationsAcl(
+            args[key].upsert[index].update,
+            user,
+            relationField.type,
+            allPermissions
+          );
+        }
       }
     }
   }
