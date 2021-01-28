@@ -301,7 +301,8 @@ async function applyUpsertOneAcl(args, user, moduleId, permissions) {
       args.create.authorId = user.id;
     }
     // Prevent roles other than admin from updating author field
-  } else if (hasUpdateAccess && hasUpdateAccess !== "NONE") {
+  }
+  if (hasUpdateAccess && hasUpdateAccess !== "NONE") {
     if (!noAuthorTypes.includes(moduleId)) {
       if (args.update.author || args.update.authorId) {
         throw new ApolloError("You can't update author!", "Forbidden");
