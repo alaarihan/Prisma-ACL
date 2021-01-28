@@ -89,7 +89,7 @@ async function checkAcl(args, info, user, moduleId, next) {
   /* Create type */
   if (createOne === info.fieldName) {
     args.data = applyCreateAcl(args.data, user, moduleId, permissions);
-    args.data = applyCreateOneRelationsAcl(
+    args.data = await applyRelationsMutationsAcl(
       args.data,
       user,
       moduleId,
@@ -123,7 +123,7 @@ async function checkAcl(args, info, user, moduleId, next) {
   }
   if (updateOne === info.fieldName) {
     await applyUpdateOneAcl(args, user, moduleId, permissions);
-    args.data = await applyUpdateOneRelationsAcl(
+    args.data = await applyRelationsMutationsAcl(
       args.data,
       user,
       moduleId,
@@ -134,13 +134,13 @@ async function checkAcl(args, info, user, moduleId, next) {
   /*  Upsert type */
   if (upsertOne === info.fieldName) {
     args = await applyUpsertOneAcl(args, user, moduleId, permissions);
-    args.create = applyCreateOneRelationsAcl(
+    args.create = await applyRelationsMutationsAcl(
       args.create,
       user,
       moduleId,
       allPermissions
     );
-    args.update = await applyUpdateOneRelationsAcl(
+    args.update = await applyRelationsMutationsAcl(
       args.update,
       user,
       moduleId,
@@ -186,6 +186,7 @@ function applyCreateAcl(args, user, moduleId, permissions) {
     }
   }
   // Auto populate the author
+  console.log("moduleId", moduleId);
   if (!noAuthorTypes.includes(moduleId)) {
     if (Array.isArray(args)) {
       args = args.map((item) => {
@@ -196,6 +197,7 @@ function applyCreateAcl(args, user, moduleId, permissions) {
       args.authorId = user.id;
     }
   }
+  console.log("args", JSON.stringify(args));
   return args;
 }
 function applyReadAcl(args, user, moduleId, permissions) {
@@ -404,7 +406,7 @@ function applyUniqueReadOwnAcl(user, item) {
 
 function applySelectArrayRelationsAcl(args, user, moduleId, allPermissions) {
   for (const [key, value] of Object.entries(args.select)) {
-    if (typeof value === "object") {
+    if (value && typeof value === "object") {
       const relationField = getRelationField(moduleId, key);
       if (!relationField) continue;
       const permissions = allPermissions.find(
@@ -449,7 +451,7 @@ function applyObjectRelationsAcl(user, moduleId, allPermissions, data) {
 
 function applyOneObjectRelationsAcl(user, moduleId, allPermissions, data) {
   for (const [key, value] of Object.entries(data)) {
-    if (typeof value === "object") {
+    if (value && typeof value === "object") {
       const relationField = getRelationField(moduleId, key);
       if (!relationField) continue;
       const permissions = allPermissions.find(
@@ -540,56 +542,14 @@ async function getUserPermissionsForTypes(types, userRole) {
   return permissions;
 }
 
-function applyCreateOneRelationsAcl(args, user, moduleId, allPermissions) {
-  for (const [key, value] of Object.entries(args)) {
-    if (typeof value === "object") {
-      const relationField = getRelationField(moduleId, key);
-      if (!relationField) continue;
-      const permissions = allPermissions.find(
-        (item) => item.type === relationField.type
-      );
-      if (!permissions) throw new Error("Error in ACL!");
-      if (args[key].create) {
-        args[key].create = applyCreateAcl(
-          args[key].create,
-          user,
-          relationField.type,
-          permissions
-        );
-        args[key].create = applyCreateOneRelationsAcl(
-          args[key].create,
-          user,
-          relationField.type,
-          allPermissions
-        );
-      }
-      if (args[key].connectOrCreate?.create) {
-        args[key].connectOrCreate.create = applyCreateAcl(
-          args[key].connectOrCreate.create,
-          user,
-          relationField.type,
-          permissions
-        );
-        args[key].connectOrCreate.create = applyCreateOneRelationsAcl(
-          args[key].connectOrCreate.create,
-          user,
-          relationField.type,
-          allPermissions
-        );
-      }
-    }
-  }
-  return args;
-}
-
-async function applyUpdateOneRelationsAcl(
+async function applyRelationsMutationsAcl(
   args,
   user,
   moduleId,
   allPermissions
 ) {
   for (const [key, value] of Object.entries(args)) {
-    if (typeof value === "object") {
+    if (value && typeof value === "object") {
       const relationField = getRelationField(moduleId, key);
       if (!relationField) continue;
       const permissions = allPermissions.find(
@@ -604,7 +564,7 @@ async function applyUpdateOneRelationsAcl(
             relationField.type,
             permissions
           );
-          args[key].create[index] = applyCreateOneRelationsAcl(
+          args[key].create[index] = await applyRelationsMutationsAcl(
             args[key].create[index],
             user,
             relationField.type,
@@ -612,20 +572,24 @@ async function applyUpdateOneRelationsAcl(
           );
         }
       }
-      if (args[key].connectOrCreate?.create) {
+      if (args[key].connectOrCreate) {
         for (let index = 0; index < args[key].connectOrCreate.length; index++) {
-          args[key].connectOrCreate.create[index] = applyCreateAcl(
-            args[key].connectOrCreate.create[index],
-            user,
-            relationField.type,
-            permissions
-          );
-          args[key].connectOrCreate.create[index] = applyCreateOneRelationsAcl(
-            args[key].connectOrCreate.create[index],
-            user,
-            relationField.type,
-            allPermissions
-          );
+          if (args[key].connectOrCreate[index].create) {
+            args[key].connectOrCreate[index].create = applyCreateAcl(
+              args[key].connectOrCreate[index].create,
+              user,
+              relationField.type,
+              permissions
+            );
+            args[key].connectOrCreate[
+              index
+            ].create = await applyRelationsMutationsAcl(
+              args[key].connectOrCreate[index].create,
+              user,
+              relationField.type,
+              allPermissions
+            );
+          }
         }
       }
       if (args[key].delete) {
@@ -666,7 +630,7 @@ async function applyUpdateOneRelationsAcl(
             relationField.type,
             permissions
           );
-          args[key].update[index] = await applyUpdateOneRelationsAcl(
+          args[key].update[index] = await applyRelationsMutationsAcl(
             args[key].update[index],
             user,
             relationField.type,
@@ -682,13 +646,13 @@ async function applyUpdateOneRelationsAcl(
             relationField.type,
             permissions
           );
-          args[key].upsert[index].create = applyCreateOneRelationsAcl(
+          args[key].upsert[index].create = await applyRelationsMutationsAcl(
             args[key].upsert[index].create,
             user,
             relationField.type,
             allPermissions
           );
-          args[key].upsert[index].update = await applyUpdateOneRelationsAcl(
+          args[key].upsert[index].update = await applyRelationsMutationsAcl(
             args[key].upsert[index].update,
             user,
             relationField.type,
