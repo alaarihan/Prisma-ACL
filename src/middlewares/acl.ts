@@ -1,4 +1,5 @@
 import { ApolloError } from "apollo-server-express";
+import { hash } from "bcrypt";
 import { dataModel, schema } from "../../tools/schema";
 import { prisma } from "../common/prisma";
 
@@ -396,12 +397,8 @@ function applyUniqueReadOwnAcl(user, item) {
 function applySelectArrayRelationsAcl(args, user, moduleId, allPermissions) {
   for (const [key, value] of Object.entries(args.select)) {
     if (typeof value === "object") {
-      const prismaModel = dataModel.models.find(
-        (item) => item.name === moduleId
-      );
-      const relationField = prismaModel.fields.find(
-        (item) => item.name === key
-      );
+      const relationField = getRelationField(moduleId, key);
+      if (!relationField) continue;
       const permissions = allPermissions.find(
         (item) => item.type === relationField.type
       );
@@ -445,12 +442,8 @@ function applyObjectRelationsAcl(user, moduleId, allPermissions, data) {
 function applyOneObjectRelationsAcl(user, moduleId, allPermissions, data) {
   for (const [key, value] of Object.entries(data)) {
     if (typeof value === "object") {
-      const prismaModel = dataModel.models.find(
-        (item) => item.name === moduleId
-      );
-      const relationField = prismaModel.fields.find(
-        (item) => item.name === key
-      );
+      const relationField = getRelationField(moduleId, key);
+      if (!relationField) continue;
       const permissions = allPermissions.find(
         (item) => item.type === relationField.type
       );
@@ -485,9 +478,9 @@ function applyOneObjectRelationsAcl(user, moduleId, allPermissions, data) {
 
 function getNestedSelectedModels(moduleId, select, models = []) {
   for (const [key, value] of Object.entries(select)) {
-    const prismaModel = dataModel.models.find((item) => item.name === moduleId);
-    const relationField = prismaModel.fields.find((item) => item.name === key);
-    if (relationField && relationField.kind === "object") {
+    const relationField = getRelationField(moduleId, key);
+    if (!relationField) continue;
+    if (relationField.kind === "object") {
       if (!models.find((item) => item.type === relationField.type))
         models.push(relationField);
       models = getNestedSelectedModels(
@@ -514,11 +507,9 @@ function getNestedDataModels(moduleId, data, models = []) {
 
 function getOneNestedDataModels(moduleId, data, models) {
   for (const [key, value] of Object.entries(data)) {
-    const prismaModel = dataModel.models.find((item) => item.name === moduleId);
-    if (!prismaModel) continue;
-    const relationField = prismaModel.fields.find((item) => item.name === key);
+    const relationField = getRelationField(moduleId, key);
     if (!relationField) continue;
-    if (relationField && relationField.kind === "object") {
+    if (relationField.kind === "object") {
       if (!models.find((item) => item.type === relationField.type))
         models.push(relationField);
       models = getNestedDataModels(relationField.type, data[key], models);
@@ -544,14 +535,7 @@ async function getUserPermissionsForTypes(types, userRole) {
 function applyCreateOneRelationsAcl(args, user, moduleId, allPermissions) {
   for (const [key, value] of Object.entries(args)) {
     if (typeof value === "object") {
-      const prismaModel = dataModel.models.find(
-        (item) => item.name === moduleId
-      );
-      if (!prismaModel) continue;
-
-      const relationField = prismaModel.fields.find(
-        (item) => item.name === key
-      );
+      const relationField = getRelationField(moduleId, key);
       if (!relationField) continue;
       const permissions = allPermissions.find(
         (item) => item.type === relationField.type
@@ -598,14 +582,7 @@ async function applyUpdateOneRelationsAcl(
 ) {
   for (const [key, value] of Object.entries(args)) {
     if (typeof value === "object") {
-      const prismaModel = dataModel.models.find(
-        (item) => item.name === moduleId
-      );
-      if (!prismaModel) continue;
-
-      const relationField = prismaModel.fields.find(
-        (item) => item.name === key
-      );
+      const relationField = getRelationField(moduleId, key);
       if (!relationField) continue;
       const permissions = allPermissions.find(
         (item) => item.type === relationField.type
@@ -714,4 +691,11 @@ async function applyUpdateOneRelationsAcl(
     }
   }
   return args;
+}
+
+function getRelationField(moduleId, name) {
+  const prismaModel = dataModel.models.find((item) => item.name === moduleId);
+  if (!prismaModel) return;
+  const relationField = prismaModel.fields.find((item) => item.name === name);
+  return relationField;
 }
