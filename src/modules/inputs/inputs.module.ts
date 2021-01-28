@@ -18,6 +18,14 @@ const excludedFields = [
     types: ["enum", "aggregate", "input"],
     fields: userSecretFields,
   },
+  {
+    names: [
+      "UserUncheckedCreateWithoutPostsInput",
+      "UserUncheckedUpdateWithoutPostsInput",
+    ],
+    types: ["input"],
+    fields: ["verificationToken"],
+  },
 ];
 export const InputsModule = createModule({
   id: "Inputs",
