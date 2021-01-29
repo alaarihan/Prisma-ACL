@@ -72,7 +72,8 @@ function createInput(options?: OptionsType) {
     enums.forEach((item) => {
       const modelExcludedFields = options.exclude.filter(
         (enumItem) =>
-          enumItem.names.includes(item.name) && enumItem.types.includes("enum")
+          (enumItem.names[0] === "*" || enumItem.names.includes(item.name)) &&
+          enumItem.types.includes("enum")
       );
       fileContent += `enum ${item.name} {`;
       item.values.forEach((item2) => {
@@ -96,18 +97,22 @@ function createInput(options?: OptionsType) {
 
     inputObjectTypes.forEach((model) => {
       const modelExcludedFields = options.exclude.filter(
-        (item) => item.names.includes(model.name) && item.types.includes("input")
+        (item) =>
+          (item.names[0] === "*" || item.names.includes(model.name)) &&
+          item.types.includes("input")
       );
 
-      if (model.fields.length > 0) {
+      if (
+        model.fields.length > 0 &&
+        model.fields.length > modelExcludedFields.length
+      ) {
         fileContent += `input ${model.name} {
       `;
         model.fields.forEach((field) => {
           if (
             !modelExcludedFields ||
-            !modelExcludedFields.find(
-              (item2) =>
-                item2.fields.includes(field.name)
+            !modelExcludedFields.find((item2) =>
+              item2.fields.includes(field.name)
             )
           ) {
             const inputType = getInputType(field, options);
@@ -133,7 +138,8 @@ function createInput(options?: OptionsType) {
       .forEach((type) => {
         const modelExcludedFields = options.exclude.filter(
           (item) =>
-            item.names.includes(type.name) && item.types.includes("aggregate")
+            (item.names[0] === "*" || item.names.includes(type.name)) &&
+            item.types.includes("aggregate")
         );
         fileContent += `type ${type.name} {
       `;

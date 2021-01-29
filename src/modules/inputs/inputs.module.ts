@@ -5,9 +5,6 @@ const userSecretFields = ["password", "verificationToken"];
 const excludedFields = [
   {
     names: [
-      "UserCreateInput",
-      "UserUpdateInput",
-      "UserUpdateManyMutationInput",
       "UserScalarFieldEnum",
       "UserMaxAggregateOutputType",
       "UserMinAggregateOutputType",
@@ -22,6 +19,9 @@ const excludedFields = [
     names: [
       "UserUncheckedCreateWithoutPostsInput",
       "UserUncheckedUpdateWithoutPostsInput",
+      "UserCreateInput",
+      "UserUpdateInput",
+      "UserUpdateManyMutationInput"
     ],
     types: ["input"],
     fields: ["verificationToken"],
