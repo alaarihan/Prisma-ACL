@@ -25,7 +25,7 @@ export default {
       );
       delete args.select;
       const user = await prisma.user.create({ data: args }).catch((err) => {
-        throw new Error(`User couldn't be created! ${err.message}`);
+        throw err;
       });
       sendEmail
         .send({
@@ -43,10 +43,14 @@ export default {
           locals: {
             user,
             token: generatedToken,
+            url: process.env.APP_URL,
           },
         })
-        .catch((error) => {
-          console.error("sending email error happened!!", error);
+        .catch(async (err) => {
+          await prisma.user.delete({ where: { id: user.id } }).catch((err) => {
+            throw err;
+          });
+          throw err;
         });
       delete user.password;
       delete user.verificationToken;
@@ -141,10 +145,11 @@ export default {
           locals: {
             user,
             token: generatedToken,
+            url: process.env.APP_URL,
           },
         })
-        .catch((error) => {
-          console.error("sending email error happened!!", error);
+        .catch((err) => {
+          throw err;
         });
       return true;
     },
