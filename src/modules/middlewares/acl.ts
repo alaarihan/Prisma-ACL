@@ -412,9 +412,9 @@ function applySelectArrayRelationsAcl(args, user, moduleId, allPermissions) {
 
 function applyObjectRelationsAcl(user, moduleId, allPermissions, data) {
   if (!data || moduleId === "User") return data;
-  if (!Array.isArray(data))
+  if (!Array.isArray(data)) {
     data = applyOneObjectRelationsAcl(user, moduleId, allPermissions, data);
-  else
+  } else {
     for (let index = 0; index < data.length; index++) {
       data[index] = applyOneObjectRelationsAcl(
         user,
@@ -423,6 +423,7 @@ function applyObjectRelationsAcl(user, moduleId, allPermissions, data) {
         data[index]
       );
     }
+  }
   return data;
 }
 
@@ -430,7 +431,7 @@ function applyOneObjectRelationsAcl(user, moduleId, allPermissions, data) {
   for (const [key, value] of Object.entries(data)) {
     if (value && typeof value === "object") {
       const relationField = getRelationField(moduleId, key);
-      if (!relationField) continue;
+      if (relationField?.kind !== "object") continue;
       const permissions = allPermissions.find(
         (item) => item.type === relationField.type
       );
@@ -466,8 +467,7 @@ function applyOneObjectRelationsAcl(user, moduleId, allPermissions, data) {
 function getNestedSelectedModels(moduleId, select, models = []) {
   for (const [key, value] of Object.entries(select)) {
     const relationField = getRelationField(moduleId, key);
-    if (!relationField) continue;
-    if (relationField.kind === "object") {
+    if (relationField?.kind === "object") {
       if (!models.find((item) => item.type === relationField.type))
         models.push(relationField);
       models = getNestedSelectedModels(
@@ -495,8 +495,7 @@ function getNestedDataModels(moduleId, data, models = []) {
 function getOneNestedDataModels(moduleId, data, models) {
   for (const [key, value] of Object.entries(data)) {
     const relationField = getRelationField(moduleId, key);
-    if (!relationField) continue;
-    if (relationField.kind === "object") {
+    if (relationField?.kind === "object") {
       if (!models.find((item) => item.type === relationField.type))
         models.push(relationField);
       models = getNestedDataModels(relationField.type, data[key], models);
@@ -528,7 +527,7 @@ async function applyRelationsMutationsAcl(
   for (const [key, value] of Object.entries(args)) {
     if (value && typeof value === "object") {
       const relationField = getRelationField(moduleId, key);
-      if (!relationField) continue;
+      if (relationField?.kind !== "object") continue;
       const permissions = allPermissions.find(
         (item) => item.type === relationField.type
       );
@@ -695,11 +694,12 @@ function preventAlteringFields(data, fields, args) {
     for (const [subKey, value] of Object.entries(data)) {
       if (args.subFields) {
         args.subFields.forEach((subField) => {
-          if (
-            subField === subKey ||
-            (typeof subField === "object" &&
-              subField.fields.includes(subKey) &&
-              subField.modules.includes(args.moduleId))
+          if (subField === subKey) {
+            throw new ApolloError(`You can't manually set '${subKey}' field`);
+          } else if (
+            typeof subField === "object" &&
+            subField.fields.includes(subKey) &&
+            subField.modules.includes(args.moduleId)
           ) {
             if (subField.byPass) {
               const permissions = args.allPermissions.find(
