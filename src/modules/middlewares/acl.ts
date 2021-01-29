@@ -86,6 +86,7 @@ async function checkAcl(args, info, user, moduleId, next) {
   );
   const permissions = allPermissions.find((item) => item.type === moduleId);
   if (!permissions) throw new Error("Error in ACL!");
+
   /* Create type */
   if (createOne === info.fieldName) {
     args.data = applyCreateAcl(args.data, user, moduleId, permissions);
@@ -155,11 +156,17 @@ async function checkAcl(args, info, user, moduleId, next) {
   if (deleteOne === info.fieldName) {
     await applyDeleteOneAcl(args, user, moduleId, permissions);
   }
+
+  /* Get the results */
   let results = await next();
+
+  /* Apply read own ACL */
   if (uniqueReadType === info.fieldName) {
     results = applyUniqueReadOwnAcl(user, results);
   }
   results = applyObjectRelationsAcl(user, moduleId, allPermissions, results);
+
+  /* Return the final results */
   return results;
 }
 
@@ -186,7 +193,6 @@ function applyCreateAcl(args, user, moduleId, permissions) {
     }
   }
   // Auto populate the author
-  console.log("moduleId", moduleId);
   if (!noAuthorTypes.includes(moduleId)) {
     if (Array.isArray(args)) {
       args = args.map((item) => {
@@ -197,7 +203,6 @@ function applyCreateAcl(args, user, moduleId, permissions) {
       args.authorId = user.id;
     }
   }
-  console.log("args", JSON.stringify(args));
   return args;
 }
 function applyReadAcl(args, user, moduleId, permissions) {
@@ -250,6 +255,10 @@ function applyUpdateManyAcl(args, user, moduleId, permissions) {
   if (!hasUpdateAccess || hasUpdateAccess === "NONE") {
     throw new ApolloError("Forbidden!", "Forbidden");
   } else if (hasUpdateAccess === "OWN") {
+    // Prevent updating own user data using updateMany mutation
+    if (moduleId === "User") {
+      throw new ApolloError("Forbidden!", "Forbidden");
+    }
     if (!args.where) {
       args.where = {};
     }
@@ -281,6 +290,21 @@ async function applyUpdateOneAcl(args, user, moduleId, permissions) {
   if (!hasUpdateAccess || hasUpdateAccess === "NONE") {
     throw new ApolloError("Forbidden!", "Forbidden");
   } else if (hasUpdateAccess === "OWN") {
+    // Prevent user from changing his email or password directly
+    if (moduleId === "User") {
+      if (args.data.password) {
+        throw new ApolloError(
+          "Forbidden!, You can't directly change your password",
+          "Forbidden"
+        );
+      }
+      if (args.data.email) {
+        throw new ApolloError(
+          "Forbidden!, You can't directly change your email",
+          "Forbidden"
+        );
+      }
+    }
     const item = await prisma[operationModel]
       .findUnique({
         where: args.where,
@@ -300,50 +324,22 @@ async function applyUpdateOneAcl(args, user, moduleId, permissions) {
 }
 
 async function applyUpsertOneAcl(args, user, moduleId, permissions) {
-  const operationModel = moduleId.charAt(0).toLowerCase() + moduleId.slice(1);
   const hasUpdateAccess = checkUserPermission("update", permissions);
   const hasCreateAccess = checkUserPermission("create", permissions);
-  if (hasCreateAccess === "YES") {
-    if (!noAuthorTypes.includes(moduleId)) {
-      if (args.create.author || args.create.authorId) {
-        throw new ApolloError("You can't manually set author!", "Forbidden");
-      }
-      // Auto populate the author
-      args.create.authorId = user.id;
-    }
-    // Prevent roles other than admin from updating author field
-  }
-  if (hasUpdateAccess && hasUpdateAccess !== "NONE") {
-    if (!noAuthorTypes.includes(moduleId)) {
-      if (args.update.author || args.update.authorId) {
-        throw new ApolloError("You can't update author!", "Forbidden");
-      }
-    }
-  }
-  if (
-    !hasUpdateAccess ||
-    hasUpdateAccess === "NONE" ||
-    !hasCreateAccess ||
-    hasCreateAccess !== "YES"
-  ) {
+  if (hasUpdateAccess !== "ALL" || hasCreateAccess !== "YES") {
     throw new ApolloError("Forbidden!", "Forbidden");
-  } else if (hasUpdateAccess === "OWN") {
-    const item = await prisma[operationModel]
-      .findUnique({
-        where: args.where,
-        rejectOnNotFound: false,
-      })
-      .catch((err) => {
-        throw err;
-      });
+  }
+  if (!noAuthorTypes.includes(moduleId)) {
     if (
-      !item || // If the item not exist then it will be created so we pass
-      (item && item.authorId && item.authorId === user.id) ||
-      (moduleId === "User" && item && item.id === user.id)
+      args.create.author ||
+      args.create.authorId ||
+      args.update.author ||
+      args.update.authorId
     ) {
-    } else {
-      throw new ApolloError("Forbidden!", "Forbidden");
+      throw new ApolloError("You can't manually set author!", "Forbidden");
     }
+    // Auto populate the author
+    args.create.authorId = user.id;
   }
   return args;
 }
