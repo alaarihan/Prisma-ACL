@@ -1,6 +1,6 @@
 import { hash } from "bcrypt";
 
-export const passHashMiddleware = async ({ args, context, info }, next) => {
+export const userMiddleware = async ({ args, context, info }, next) => {
   const types = ["Query", "Mutation"];
   const byPassList = ["deleteOneUser", "deleteManyUser"];
   if (
