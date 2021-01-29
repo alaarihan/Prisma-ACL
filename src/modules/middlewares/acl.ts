@@ -43,31 +43,25 @@ async function checkAcl(args, info, user, moduleId, next) {
   const deleteOne = `deleteOne${moduleId}`;
   const deleteMany = `deleteMany${moduleId}`;
   const upsertOne = `upsertOne${moduleId}`;
+
+  // Auto fill author for all roles
+  if ([createOne, updateOne, updateMany, upsertOne].includes(info.fieldName)) {
+    args.data = doFieldAction(
+      args.data,
+      autoFillAuthor,
+      ["create", "createOrConnect", "update", "updateMany", "upsert"],
+      { moduleId, user }
+    );
+    args.data = await doFieldAction(
+      args.data,
+      autoHashPassword,
+      ["create", "createOrConnect", "update", "updateMany", "upsert"],
+      null
+    );
+  }
+
   /* Admin role */
   if (user.role === "ADMIN") {
-    if (noAuthorTypes.includes(moduleId)) return next();
-    // Auto populate the author if not manually populated by admin
-    if (
-      createOne === info.fieldName &&
-      !args.data.authorId &&
-      !args.data.author
-    ) {
-      args.data.authorId = user.id;
-    } else if (
-      upsertOne === info.fieldName &&
-      !args.create.authorId &&
-      !args.create.author
-    ) {
-      args.create.authorId = user.id;
-    }
-    // Auto hash password when create or update author field
-    if (args.data) {
-      args.data = await hashPasswordInData(args.data);
-    } else if (args.create) {
-      args.create = await hashPasswordInData(args.create);
-    } else if (args.update) {
-      args.update = await hashPasswordInData(args.update);
-    }
     return next();
   }
 
@@ -87,6 +81,28 @@ async function checkAcl(args, info, user, moduleId, next) {
   const permissions = allPermissions.find((item) => item.type === moduleId);
   if (!permissions) throw new Error("Error in ACL!");
 
+  if ([createOne, updateOne, updateMany, upsertOne].includes(info.fieldName)) {
+    args.data = doFieldAction(
+      args.data,
+      preventAlteringFields,
+      ["create", "createOrConnect", "update", "updateMany", "upsert"],
+      {
+        subFields: [
+          "id",
+          "createdAt",
+          "updatedAt",
+          {
+            fields: ["role", "password", "email"],
+            modules: ["User"],
+            byPass: { create: "YES", update: ["ALL"], and: false },
+          },
+        ],
+        moduleId,
+        user,
+        allPermissions,
+      }
+    );
+  }
   /* Create type */
   if (createOne === info.fieldName) {
     args.data = applyCreateAcl(args.data, user, moduleId, permissions);
@@ -175,34 +191,6 @@ function applyCreateAcl(args, user, moduleId, permissions) {
   if (!hasCreateAccess || hasCreateAccess === "NO") {
     throw new ApolloError("Forbidden!", "Forbidden");
   }
-  if (hasCreateAccess === "YES") {
-    // Prevent manually populating the author
-    if (!noAuthorTypes.includes(moduleId)) {
-      if (Array.isArray(args)) {
-        args.forEach((item) => {
-          if (item.author || item.authorId) {
-            throw new ApolloError(
-              "You can't manually set author!",
-              "Forbidden"
-            );
-          }
-        });
-      } else if (args.author || args.authorId) {
-        throw new ApolloError("You can't manually set author!", "Forbidden");
-      }
-    }
-  }
-  // Auto populate the author
-  if (!noAuthorTypes.includes(moduleId)) {
-    if (Array.isArray(args)) {
-      args = args.map((item) => {
-        item.authorId = user.id;
-        return item;
-      });
-    } else {
-      args.authorId = user.id;
-    }
-  }
   return args;
 }
 function applyReadAcl(args, user, moduleId, permissions) {
@@ -244,14 +232,6 @@ function applyUniqueReadAcl(args, permissions) {
 
 function applyUpdateManyAcl(args, user, moduleId, permissions) {
   const hasUpdateAccess = checkUserPermission("update", permissions);
-  // Prevent roles other than admin from updating author field
-  if (hasUpdateAccess && hasUpdateAccess !== "NONE") {
-    if (!noAuthorTypes.includes(moduleId)) {
-      if (args.data.author || args.data.authorId) {
-        throw new ApolloError("You can't update author!", "Forbidden");
-      }
-    }
-  }
   if (!hasUpdateAccess || hasUpdateAccess === "NONE") {
     throw new ApolloError("Forbidden!", "Forbidden");
   } else if (hasUpdateAccess === "OWN") {
@@ -279,14 +259,6 @@ function applyUpdateManyAcl(args, user, moduleId, permissions) {
 async function applyUpdateOneAcl(args, user, moduleId, permissions) {
   const operationModel = moduleId.charAt(0).toLowerCase() + moduleId.slice(1);
   const hasUpdateAccess = checkUserPermission("update", permissions);
-  // Prevent roles other than admin from updating author field
-  if (hasUpdateAccess && hasUpdateAccess !== "NONE") {
-    if (!noAuthorTypes.includes(moduleId)) {
-      if (args.data.author || args.data.authorId) {
-        throw new ApolloError("You can't update author!", "Forbidden");
-      }
-    }
-  }
   if (!hasUpdateAccess || hasUpdateAccess === "NONE") {
     throw new ApolloError("Forbidden!", "Forbidden");
   } else if (hasUpdateAccess === "OWN") {
@@ -324,22 +296,30 @@ async function applyUpdateOneAcl(args, user, moduleId, permissions) {
 }
 
 async function applyUpsertOneAcl(args, user, moduleId, permissions) {
+  const operationModel = moduleId.charAt(0).toLowerCase() + moduleId.slice(1);
   const hasUpdateAccess = checkUserPermission("update", permissions);
   const hasCreateAccess = checkUserPermission("create", permissions);
-  if (hasUpdateAccess !== "ALL" || hasCreateAccess !== "YES") {
+  if (
+    !hasUpdateAccess ||
+    hasUpdateAccess === "NONE" ||
+    hasCreateAccess !== "YES"
+  ) {
     throw new ApolloError("Forbidden!", "Forbidden");
-  }
-  if (!noAuthorTypes.includes(moduleId)) {
+  } else if (hasUpdateAccess === "OWN") {
+    const item = await prisma[operationModel]
+      .findUnique({
+        where: args.where,
+        rejectOnNotFound: false,
+      })
+      .catch((err) => {
+        throw err;
+      });
     if (
-      args.create.author ||
-      args.create.authorId ||
-      args.update.author ||
-      args.update.authorId
+      (item?.authorId && item.authorId !== user.id) ||
+      (moduleId === "User" && item && item.id !== user.id)
     ) {
-      throw new ApolloError("You can't manually set author!", "Forbidden");
+      throw new ApolloError("Forbidden!", "Forbidden");
     }
-    // Auto populate the author
-    args.create.authorId = user.id;
   }
   return args;
 }
@@ -431,7 +411,8 @@ function applySelectArrayRelationsAcl(args, user, moduleId, allPermissions) {
 }
 
 function applyObjectRelationsAcl(user, moduleId, allPermissions, data) {
-  if (data && !Array.isArray(data))
+  if (!data || moduleId === "User") return data;
+  if (!Array.isArray(data))
     data = applyOneObjectRelationsAcl(user, moduleId, allPermissions, data);
   else
     for (let index = 0; index < data.length; index++) {
@@ -470,7 +451,7 @@ function applyOneObjectRelationsAcl(user, moduleId, allPermissions, data) {
           throw new ApolloError("Forbidden!", "Forbidden");
         }
       }
-      if (typeof data[key] === "object")
+      if (data[key] && typeof data[key] === "object")
         data[key] = applyObjectRelationsAcl(
           user,
           relationField.type,
@@ -668,46 +649,123 @@ function getRelationField(moduleId, name) {
   return relationField;
 }
 
-async function hashPasswordInData(data) {
-  if (!data) return data;
-  if (data && Array.isArray(data)) {
-    for (let index = 0; index < data.length; index++) {}
+function doFieldAction(data, action, fields, args, index = 0) {
+  if (index === 0) {
+    data = action(data, fields, args);
+  }
+  index++;
+  if (Array.isArray(data)) {
+    for (let index = 0; index < data.length; index++) {
+      data = doFieldActionObject(data[index], action, fields, args, index);
+    }
   } else if (typeof data === "object") {
-    if (typeof data === "object") {
-      data = await hashPasswordInObject(data);
+    data = doFieldActionObject(data, action, fields, args, index);
+  }
+  return data;
+}
+
+function doFieldActionObject(data, action, fields, args, index) {
+  for (const [key, value] of Object.entries(data)) {
+    if (args.moduleId && typeof value === "object") {
+      const relationField = getRelationField(args.moduleId, key);
+      if (relationField?.type) {
+        args.moduleId = relationField.type;
+      }
+    }
+    if (fields === null || fields.includes(key)) {
+      data[key] = action(data[key], fields, args);
+    }
+    if (Array.isArray(data[key])) {
+      data[key] = doFieldAction(data[key], action, fields, args, index);
+    } else if (typeof data[key] === "object") {
+      data[key] = doFieldActionObject(data[key], action, fields, args, index);
     }
   }
   return data;
 }
 
-async function hashPasswordInObject(data) {
-  for (const [key, value] of Object.entries(data)) {
-    if (key === "author") {
-      if (data[key]?.create?.password) {
-        data[key].create.password = await hash(data[key].create.password, 10);
-      } else if (data[key]?.update?.password) {
-        data[key].update.password = await hash(data[key].update.password, 10);
-      } else if (data[key]?.connectOrCreate?.create?.password) {
-        data[key].connectOrCreate.create.password = await hash(
-          data[key].connectOrCreate.create.password,
-          10
-        );
-      } else if (data[key]?.upsert?.create?.password) {
-        data[key].upsert.create.password = await hash(
-          data[key].upsert.create.password,
-          10
-        );
-      } else if (data[key]?.upsert?.update?.password) {
-        data[key].upsert.update.password = await hash(
-          data[key].upsert.update.password,
-          10
-        );
-      }
-    } else if (Array.isArray(data[key])) {
-      data[key] = await hashPasswordInData(data[key]);
-    } else if (typeof data[key] === "object") {
-      data[key] = await hashPasswordInObject(data[key]);
+function preventAlteringFields(data, fields, args) {
+  if (args.user?.role === "ADMIN") return data;
+  if (Array.isArray(data)) {
+    for (let index = 0; index < data.length; index++) {
+      data[index] = preventAlteringFields(data[index], fields, args.subFields);
     }
+  }
+  if (typeof data === "object")
+    for (const [subKey, value] of Object.entries(data)) {
+      if (args.subFields) {
+        args.subFields.forEach((subField) => {
+          if (
+            subField === subKey ||
+            (typeof subField === "object" &&
+              subField.fields.includes(subKey) &&
+              subField.modules.includes(args.moduleId))
+          ) {
+            if (subField.byPass) {
+              const permissions = args.allPermissions.find(
+                (item) => item.type === args.moduleId
+              );
+              if (!permissions) throw new Error("Error in ACL!");
+              let allAclOk = true;
+              let someAclOk = false;
+              if (subField.byPass.create) {
+                const createAccess = checkUserPermission("create", permissions);
+                if (createAccess === subField.byPass.create) {
+                  someAclOk = true;
+                } else {
+                  allAclOk = false;
+                }
+              }
+              if (subField.byPass.update) {
+                const updateAccess = checkUserPermission("update", permissions);
+                if (subField.byPass.update.includes(updateAccess)) {
+                  someAclOk = true;
+                } else {
+                  allAclOk = false;
+                }
+              }
+              if (
+                (subField.byPass.and && !allAclOk) ||
+                (!subField.byPass.and && !someAclOk)
+              ) {
+                throw new ApolloError(
+                  `You can't manually set '${subKey}' field`
+                );
+              }
+            } else {
+              throw new ApolloError(`You can't manually set '${subKey}' field`);
+            }
+          }
+        });
+      }
+    }
+  return data;
+}
+
+function autoFillAuthor(data, fields, { moduleId, user }) {
+  if (Array.isArray(data)) {
+    for (let index = 0; index < data.length; index++) {
+      data[index] = autoFillAuthor(data[index], fields, { moduleId, user });
+    }
+  }
+  if (typeof data === "object" && !noAuthorTypes.includes(moduleId)) {
+    if ((user.role !== "ADMIN" && data.author) || data.authorId) {
+      throw new ApolloError("You can't manually set author!", "Forbidden");
+    } else {
+      data.authorId = user.id;
+    }
+  }
+  return data;
+}
+
+async function autoHashPassword(data, fields) {
+  if (Array.isArray(data)) {
+    for (let index = 0; index < data.length; index++) {
+      data[index] = autoHashPassword(data[index], fields);
+    }
+  }
+  if (typeof data === "object" && data.password) {
+    data.password = await hash(data.password, 10);
   }
   return data;
 }
