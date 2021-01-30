@@ -172,7 +172,7 @@ async function checkAcl(args, info, user, moduleId, next) {
   if (deleteOne === info.fieldName) {
     await applyDeleteOneAcl(args, user, moduleId, permissions);
   }
-
+  
   /* Get the results */
   let results = await next();
 
@@ -648,22 +648,28 @@ function getRelationField(moduleId, name) {
   return relationField;
 }
 
-function doFieldAction(data, action, fields, args, index = 0) {
-  if (index === 0) {
+function doFieldAction(data, action, fields, args, times = 0) {
+  if (times === 0) {
     data = action(data, fields, args);
   }
-  index++;
+  times++;
   if (Array.isArray(data)) {
     for (let index = 0; index < data.length; index++) {
-      data = doFieldActionObject(data[index], action, fields, args, index);
+      data[index] = doFieldActionObject(
+        data[index],
+        action,
+        fields,
+        args,
+        times
+      );
     }
   } else if (typeof data === "object") {
-    data = doFieldActionObject(data, action, fields, args, index);
+    data = doFieldActionObject(data, action, fields, args, times);
   }
   return data;
 }
 
-function doFieldActionObject(data, action, fields, args, index) {
+function doFieldActionObject(data, action, fields, args, times) {
   for (const [key, value] of Object.entries(data)) {
     if (args.moduleId && typeof value === "object") {
       const relationField = getRelationField(args.moduleId, key);
@@ -674,10 +680,8 @@ function doFieldActionObject(data, action, fields, args, index) {
     if (fields === null || fields.includes(key)) {
       data[key] = action(data[key], fields, args);
     }
-    if (Array.isArray(data[key])) {
-      data[key] = doFieldAction(data[key], action, fields, args, index);
-    } else if (typeof data[key] === "object") {
-      data[key] = doFieldActionObject(data[key], action, fields, args, index);
+    if (data[key] && typeof data[key] === "object") {
+      data[key] = doFieldAction(data[key], action, fields, args, times);
     }
   }
   return data;
@@ -685,20 +689,15 @@ function doFieldActionObject(data, action, fields, args, index) {
 
 function preventAlteringFields(data, fields, args) {
   if (args.user?.role === "ADMIN") return data;
-  if (Array.isArray(data)) {
-    for (let index = 0; index < data.length; index++) {
-      data[index] = preventAlteringFields(data[index], fields, args.subFields);
-    }
-  }
-  if (typeof data === "object")
-    for (const [subKey, value] of Object.entries(data)) {
+  if (typeof data === "object") {
+    for (const [key, value] of Object.entries(data)) {
       if (args.subFields) {
         args.subFields.forEach((subField) => {
-          if (subField === subKey) {
-            throw new ApolloError(`You can't manually set '${subKey}' field`);
+          if (subField === key) {
+            throw new ApolloError(`You can't manually set '${key}' field`);
           } else if (
             typeof subField === "object" &&
-            subField.fields.includes(subKey) &&
+            subField.fields.includes(key) &&
             subField.modules.includes(args.moduleId)
           ) {
             if (subField.byPass) {
@@ -728,28 +727,22 @@ function preventAlteringFields(data, fields, args) {
                 (subField.byPass.and && !allAclOk) ||
                 (!subField.byPass.and && !someAclOk)
               ) {
-                throw new ApolloError(
-                  `You can't manually set '${subKey}' field`
-                );
+                throw new ApolloError(`You can't manually set '${key}' field`);
               }
             } else {
-              throw new ApolloError(`You can't manually set '${subKey}' field`);
+              throw new ApolloError(`You can't manually set '${key}' field`);
             }
           }
         });
       }
     }
+  }
   return data;
 }
 
 function autoFillAuthor(data, fields, { moduleId, user }) {
-  if (Array.isArray(data)) {
-    for (let index = 0; index < data.length; index++) {
-      data[index] = autoFillAuthor(data[index], fields, { moduleId, user });
-    }
-  }
   if (typeof data === "object" && !noAuthorTypes.includes(moduleId)) {
-    if ((user.role !== "ADMIN" && data.author) || data.authorId) {
+    if (user.role !== "ADMIN" && (data.author || data.authorId)) {
       throw new ApolloError("You can't manually set author!", "Forbidden");
     } else {
       data.authorId = user.id;
@@ -759,11 +752,6 @@ function autoFillAuthor(data, fields, { moduleId, user }) {
 }
 
 async function autoHashPassword(data, fields) {
-  if (Array.isArray(data)) {
-    for (let index = 0; index < data.length; index++) {
-      data[index] = autoHashPassword(data[index], fields);
-    }
-  }
   if (typeof data === "object" && data.password) {
     data.password = await hash(data.password, 10);
   }
