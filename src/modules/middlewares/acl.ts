@@ -456,22 +456,13 @@ async function applyConnectOrCreateAcl(args, user, moduleId, permissions) {
   if (hasReadAccess === "ALL") {
     return args;
   } else if (hasReadAccess === "OWN") {
-    if (Array.isArray(args)) {
-      for (let index = 0; index < args.length; index++) {
-        const itemsWhere = genItemsWhere([args[index].where]);
-        const ownItem = await userOwnItems(itemsWhere, user, moduleId);
-        if (!ownItem) {
-          args[index].where = { id: -10 };
-        }
-      }
-    } else if (typeof args === "object") {
-      const itemsWhere = genItemsWhere([...args.where]);
+    if (typeof args === "object") {
+      const itemsWhere = genItemsWhere([args.where]);
       const ownItem = await userOwnItems(itemsWhere, user, moduleId);
       if (!ownItem) {
         args.where = { id: -10 };
       }
     }
-
     return args;
   } else {
     throw new ApolloError(
@@ -661,19 +652,19 @@ async function applyRelationsMutationsAcl(
         }
       }
       if (args[key].connectOrCreate) {
-        args[key].connectOrCreate = await applyConnectOrCreateAcl(
-          args[key].connectOrCreate,
-          user,
-          relationField.type,
-          permissions
-        );
         if (Array.isArray(args[key].connectOrCreate)) {
-          // We need to do check acl for reations for each item because it might have nested mutations of other types
+         
           for (
             let index = 0;
             index < args[key].connectOrCreate.length;
             index++
           ) {
+            args[key].connectOrCreate[index] = await applyConnectOrCreateAcl(
+              args[key].connectOrCreate[index],
+              user,
+              relationField.type,
+              permissions
+            );
             args[key].connectOrCreate[
               index
             ].create = await applyRelationsMutationsAcl(
@@ -684,6 +675,12 @@ async function applyRelationsMutationsAcl(
             );
           }
         } else if (typeof args[key].connectOrCreate === "object") {
+          args[key].connectOrCreate = await applyConnectOrCreateAcl(
+            args[key].connectOrCreate,
+            user,
+            relationField.type,
+            permissions
+          );
           args[key].connectOrCreate.create = await applyRelationsMutationsAcl(
             args[key].connectOrCreate.create,
             user,
@@ -982,3 +979,15 @@ function genItemsWhere(items, subKey = null) {
   if (whereItems.OR.length < 1) return null;
   return whereItems;
 }
+
+// Todo
+// Check delete/disconnect one to one relations where the key will have boolean type not an object to use it as a "where"
+/* 
+Don't allow "set" if the user don't have read access to the items that he want to set 
+and also we need to check if there is any exiting relations connected to the item and 
+see if he has access to them all before allow the operation for the type
+ */
+
+/* 
+ Don't allow editing reference fields unless the user has permission to read the corresponding type
+ */
