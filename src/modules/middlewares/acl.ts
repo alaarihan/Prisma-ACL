@@ -471,7 +471,7 @@ function getNestedDataModels(moduleId, data, models = []) {
     for (let index = 0; index < data.length; index++) {
       models = getOneNestedDataModels(moduleId, data[index], models);
     }
-  } else {
+  } else if(typeof data === "object"){
     models = getOneNestedDataModels(moduleId, data, models);
   }
 
