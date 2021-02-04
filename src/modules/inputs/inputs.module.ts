@@ -21,7 +21,7 @@ const excludedFields = [
       "UserUncheckedUpdateWithoutPostsInput",
       "UserCreateInput",
       "UserUpdateInput",
-      "UserUpdateManyMutationInput"
+      "UserUpdateManyMutationInput",
     ],
     types: ["input"],
     fields: ["verificationToken"],
