@@ -22,7 +22,7 @@ model User {
   updatedAt         DateTime  @updatedAt
   logs              Log[]
   salawat           Salat[]
-  posts              Post[]
+  posts             Post[]
 }
 
 enum UserRole {
