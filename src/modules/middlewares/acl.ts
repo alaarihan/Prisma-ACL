@@ -127,7 +127,7 @@ async function checkAcl(args, info, user, moduleId, next) {
     );
   }
   if (uniqueReadType === info.fieldName) {
-    args = applyUniqueReadAcl(args, permissions);
+    args = applyUniqueReadAcl(args, moduleId, permissions);
     /* restrict relational selected fields */
     args.select = applySelectArrayRelationsAcl(
       args,
@@ -191,13 +191,13 @@ async function checkAcl(args, info, user, moduleId, next) {
 function applyCreateAcl(user, moduleId, permissions) {
   const hasCreateAccess = checkUserPermission("create", permissions);
   if (!hasCreateAccess || hasCreateAccess === "NO") {
-    throw new ApolloError("Forbidden!", "Forbidden");
+    throw new ApolloError(`You can't create ${moduleId} type`, "Forbidden");
   }
 }
 function applyReadAcl(args, user, moduleId, permissions) {
   const hasReadAccess = checkUserPermission("read", permissions);
   if (hasReadAccess === "OWN" && moduleId === "User") {
-    throw new ApolloError("Forbidden!", "Forbidden");
+    throw new ApolloError("You can't query Users!", "Forbidden");
   }
   if (hasReadAccess === "OWN") {
     if (!args.where) {
@@ -217,14 +217,14 @@ function applyReadAcl(args, user, moduleId, permissions) {
   } else if (hasReadAccess === "ALL") {
     return args;
   } else {
-    throw new ApolloError("Forbidden!", "Forbidden");
+    throw new ApolloError(`You can't query ${moduleId} type!`, "Forbidden");
   }
 }
 
-function applyUniqueReadAcl(args, permissions) {
+function applyUniqueReadAcl(args, moduleId, permissions) {
   const hasReadAccess = checkUserPermission("read", permissions);
   if (!hasReadAccess || hasReadAccess === "NONE") {
-    throw new ApolloError("Forbidden!", "Forbidden");
+    throw new ApolloError(`You can't query ${moduleId} type!`, "Forbidden");
   } else if (hasReadAccess === "OWN") {
     args.select.authorId = true;
   }
@@ -234,11 +234,11 @@ function applyUniqueReadAcl(args, permissions) {
 function applyUpdateManyAcl(args, user, moduleId, permissions) {
   const hasUpdateAccess = checkUserPermission("update", permissions);
   if (!hasUpdateAccess || hasUpdateAccess === "NONE") {
-    throw new ApolloError("Forbidden!", "Forbidden");
+    throw new ApolloError(`You can't update ${moduleId} type!`, "Forbidden");
   } else if (hasUpdateAccess === "OWN") {
     // Prevent updating own user data using updateMany mutation
     if (moduleId === "User") {
-      throw new ApolloError("Forbidden!", "Forbidden");
+      throw new ApolloError("You can't update Users!", "Forbidden");
     }
     if (!args.where) {
       args.where = {};
@@ -261,7 +261,7 @@ async function applyUpdateOneAcl(args, user, moduleId, permissions) {
   const operationModel = moduleId.charAt(0).toLowerCase() + moduleId.slice(1);
   const hasUpdateAccess = checkUserPermission("update", permissions);
   if (!hasUpdateAccess || hasUpdateAccess === "NONE") {
-    throw new ApolloError("Forbidden!", "Forbidden");
+    throw new ApolloError(`You can't update ${moduleId} type!`, "Forbidden");
   } else if (hasUpdateAccess === "OWN") {
     if (noAuthorTypes.includes(moduleId)) return;
     const item = await prisma[operationModel]
@@ -270,13 +270,13 @@ async function applyUpdateOneAcl(args, user, moduleId, permissions) {
         rejectOnNotFound: true,
       })
       .catch((err) => {
-        throw err;
+        throw new ApolloError(`${moduleId} item not exist or you don't have update permission to it!`, "Forbidden");
       });
     if (
       (moduleId === "User" && item?.id !== user.id) ||
       (moduleId !== "User" && item?.authorId !== user.id)
     ) {
-      throw new ApolloError("Forbidden!", "Forbidden");
+      throw new ApolloError(`${moduleId} item not exist or you don't have update permission to it!`, "Forbidden");
     }
   }
 }
@@ -290,7 +290,7 @@ async function applyUpsertOneAcl(args, user, moduleId, permissions) {
     hasUpdateAccess === "NONE" ||
     hasCreateAccess !== "YES"
   ) {
-    throw new ApolloError("Forbidden!", "Forbidden");
+    throw new ApolloError(`You can't upsert ${moduleId} type!`, "Forbidden");
   } else if (hasUpdateAccess === "OWN") {
     if (noAuthorTypes.includes(moduleId)) return args;
     const item = await prisma[operationModel]
@@ -299,13 +299,13 @@ async function applyUpsertOneAcl(args, user, moduleId, permissions) {
         rejectOnNotFound: false,
       })
       .catch((err) => {
-        throw err;
+        throw new ApolloError(`${moduleId} item not exist or you don't have upsert permission to it!`, "Forbidden");
       });
     if (
       (moduleId === "User" && item?.id !== user.id) ||
       (moduleId !== "User" && item?.authorId !== user.id)
     ) {
-      throw new ApolloError("Forbidden!", "Forbidden");
+      throw new ApolloError(`${moduleId} item not exist or you don't have upsert permission to it!`, "Forbidden");
     }
   }
   return args;
@@ -314,9 +314,9 @@ async function applyUpsertOneAcl(args, user, moduleId, permissions) {
 function applyDeleteManyAcl(args, user, moduleId, permissions) {
   const hasDeleteAccess = checkUserPermission("delete", permissions);
   if (!hasDeleteAccess || hasDeleteAccess === "NONE") {
-    throw new ApolloError("Forbidden!", "Forbidden");
+    throw new ApolloError(`You can't delete ${moduleId} type!`, "Forbidden");
   } else if (hasDeleteAccess === "OWN") {
-    if (moduleId === "User") throw new ApolloError("Forbidden!", "Forbidden");
+    if (moduleId === "User") throw new ApolloError("You can't delete Users!", "Forbidden");
     if (!args) {
       args = {};
     }
@@ -338,22 +338,22 @@ async function applyDeleteOneAcl(args, user, moduleId, permissions) {
   const operationModel = moduleId.charAt(0).toLowerCase() + moduleId.slice(1);
   const hasDeleteAccess = checkUserPermission("delete", permissions);
   if (!hasDeleteAccess || hasDeleteAccess === "NONE") {
-    throw new ApolloError("Forbidden!", "Forbidden");
+    throw new ApolloError(`You can't delete ${moduleId} type!`, "Forbidden");
   } else if (hasDeleteAccess === "OWN") {
-    if (moduleId === "User") throw new ApolloError("Forbidden!", "Forbidden");
+    if (moduleId === "User") throw new ApolloError("You can't delete Users!", "Forbidden");
     const item = await prisma[operationModel]
       .findUnique({
         where: args.where,
         rejectOnNotFound: true,
       })
       .catch((err) => {
-        throw err;
+        throw new ApolloError(`${moduleId} item not exist or you don't have delete permission to it!`, "Forbidden");
       });
     if (
       (moduleId === "User" && item?.id !== user.id) ||
       (moduleId !== "User" && item?.authorId !== user.id)
     ) {
-      throw new ApolloError("Forbidden!", "Forbidden");
+      throw new ApolloError(`${moduleId} item not exist or you don't have delete permission to it!`, "Forbidden");
     }
   }
 }
@@ -424,7 +424,7 @@ function applyOneObjectRelationsAcl(user, moduleId, allPermissions, data) {
       if (!permissions) throw new Error("Error in ACL!");
       const hasReadAccess = checkUserPermission("read", permissions);
       if (hasReadAccess === "OWN" && moduleId === "User") {
-        throw new ApolloError("Forbidden!", "Forbidden");
+        throw new ApolloError("You can't query users!", "Forbidden");
       }
       if (!relationField.isList) {
         if (hasReadAccess === "ALL") continue;
@@ -435,7 +435,7 @@ function applyOneObjectRelationsAcl(user, moduleId, allPermissions, data) {
         ) {
           data[key] = null;
         } else {
-          throw new ApolloError("Forbidden!", "Forbidden");
+          throw new ApolloError(`You can't query ${moduleId} type!`, "Forbidden");
         }
       }
       if (data[key] && typeof data[key] === "object")
