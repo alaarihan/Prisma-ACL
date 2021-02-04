@@ -451,7 +451,6 @@ async function applyConnectDisconnectAcl(
 }
 
 async function applyConnectOrCreateAcl(args, user, moduleId, permissions) {
-  applyCreateAcl(user, moduleId, permissions);
   const hasReadAccess = checkUserPermission("read", permissions);
   if (hasReadAccess === "ALL") {
     return args;
@@ -652,8 +651,10 @@ async function applyRelationsMutationsAcl(
         }
       }
       if (args[key].connectOrCreate) {
+        // We check if the user has permission to create the type first
+        applyCreateAcl(user, relationField.type, permissions);
+        
         if (Array.isArray(args[key].connectOrCreate)) {
-         
           for (
             let index = 0;
             index < args[key].connectOrCreate.length;
