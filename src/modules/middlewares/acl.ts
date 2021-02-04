@@ -52,6 +52,8 @@ async function checkAcl(args, info, user, moduleId, next) {
       ["create", "createOrConnect", "update", "updateMany", "upsert"],
       { moduleId, user }
     );
+
+    // Auto hash password
     args.data = await doFieldAction(
       args.data,
       autoHashPassword,
@@ -105,7 +107,7 @@ async function checkAcl(args, info, user, moduleId, next) {
   }
   /* Create type */
   if (createOne === info.fieldName) {
-    args.data = applyCreateAcl(args.data, user, moduleId, permissions);
+    applyCreateAcl(user, moduleId, permissions);
     args.data = await applyRelationsMutationsAcl(
       args.data,
       user,
@@ -116,7 +118,7 @@ async function checkAcl(args, info, user, moduleId, next) {
   /* Read types */
   if (readTypes.includes(info.fieldName)) {
     args = applyReadAcl(args, user, moduleId, permissions);
-    /* restrict relational selected fields */
+    /* Restrict relational selected fields */
     args.select = applySelectArrayRelationsAcl(
       args,
       user,
@@ -172,7 +174,7 @@ async function checkAcl(args, info, user, moduleId, next) {
   if (deleteOne === info.fieldName) {
     await applyDeleteOneAcl(args, user, moduleId, permissions);
   }
-  
+
   /* Get the results */
   let results = await next();
 
@@ -186,12 +188,11 @@ async function checkAcl(args, info, user, moduleId, next) {
   return results;
 }
 
-function applyCreateAcl(args, user, moduleId, permissions) {
+function applyCreateAcl(user, moduleId, permissions) {
   const hasCreateAccess = checkUserPermission("create", permissions);
   if (!hasCreateAccess || hasCreateAccess === "NO") {
     throw new ApolloError("Forbidden!", "Forbidden");
   }
-  return args;
 }
 function applyReadAcl(args, user, moduleId, permissions) {
   const hasReadAccess = checkUserPermission("read", permissions);
@@ -262,21 +263,7 @@ async function applyUpdateOneAcl(args, user, moduleId, permissions) {
   if (!hasUpdateAccess || hasUpdateAccess === "NONE") {
     throw new ApolloError("Forbidden!", "Forbidden");
   } else if (hasUpdateAccess === "OWN") {
-    // Prevent user from changing his email or password directly
-    if (moduleId === "User") {
-      if (args.data.password) {
-        throw new ApolloError(
-          "Forbidden!, You can't directly change your password",
-          "Forbidden"
-        );
-      }
-      if (args.data.email) {
-        throw new ApolloError(
-          "Forbidden!, You can't directly change your email",
-          "Forbidden"
-        );
-      }
-    }
+    if (noAuthorTypes.includes(moduleId)) return;
     const item = await prisma[operationModel]
       .findUnique({
         where: args.where,
@@ -286,10 +273,9 @@ async function applyUpdateOneAcl(args, user, moduleId, permissions) {
         throw err;
       });
     if (
-      (item && item.authorId && item.authorId === user.id) ||
-      (moduleId === "User" && item && item.id === user.id)
+      (moduleId === "User" && item?.id !== user.id) ||
+      (moduleId !== "User" && item?.authorId !== user.id)
     ) {
-    } else {
       throw new ApolloError("Forbidden!", "Forbidden");
     }
   }
@@ -306,6 +292,7 @@ async function applyUpsertOneAcl(args, user, moduleId, permissions) {
   ) {
     throw new ApolloError("Forbidden!", "Forbidden");
   } else if (hasUpdateAccess === "OWN") {
+    if (noAuthorTypes.includes(moduleId)) return args;
     const item = await prisma[operationModel]
       .findUnique({
         where: args.where,
@@ -315,8 +302,8 @@ async function applyUpsertOneAcl(args, user, moduleId, permissions) {
         throw err;
       });
     if (
-      (item?.authorId && item.authorId !== user.id) ||
-      (moduleId === "User" && item && item.id !== user.id)
+      (moduleId === "User" && item?.id !== user.id) ||
+      (moduleId !== "User" && item?.authorId !== user.id)
     ) {
       throw new ApolloError("Forbidden!", "Forbidden");
     }
@@ -363,10 +350,9 @@ async function applyDeleteOneAcl(args, user, moduleId, permissions) {
         throw err;
       });
     if (
-      (item && item.authorId === user.id) ||
-      (moduleId === "User" && item && item.id === user.id)
+      (moduleId === "User" && item?.id !== user.id) ||
+      (moduleId !== "User" && item?.authorId !== user.id)
     ) {
-    } else {
       throw new ApolloError("Forbidden!", "Forbidden");
     }
   }
@@ -532,16 +518,23 @@ async function applyRelationsMutationsAcl(
         (item) => item.type === relationField.type
       );
       if (!permissions) throw new Error("Error in ACL!");
+      if (args[key].connectOrCreate || args[key].create) {
+        applyCreateAcl(user, relationField.type, permissions);
+      }
       if (args[key].create) {
-        for (let index = 0; index < args[key].create.length; index++) {
-          args[key].create[index] = applyCreateAcl(
-            args[key].create[index],
-            user,
-            relationField.type,
-            permissions
-          );
-          args[key].create[index] = await applyRelationsMutationsAcl(
-            args[key].create[index],
+        if (Array.isArray(args[key].create)) {
+          // We need to do check acl for reations for each item because it might have nested mutations of other types
+          for (let index = 0; index < args[key].create.length; index++) {
+            args[key].create[index] = await applyRelationsMutationsAcl(
+              args[key].create[index],
+              user,
+              relationField.type,
+              allPermissions
+            );
+          }
+        } else if (typeof args[key].create === "object") {
+          args[key].create = await applyRelationsMutationsAcl(
+            args[key].create,
             user,
             relationField.type,
             allPermissions
@@ -549,14 +542,13 @@ async function applyRelationsMutationsAcl(
         }
       }
       if (args[key].connectOrCreate) {
-        for (let index = 0; index < args[key].connectOrCreate.length; index++) {
-          if (args[key].connectOrCreate[index].create) {
-            args[key].connectOrCreate[index].create = applyCreateAcl(
-              args[key].connectOrCreate[index].create,
-              user,
-              relationField.type,
-              permissions
-            );
+        if (Array.isArray(args[key].connectOrCreate)) {
+          // We need to do check acl for reations for each item because it might have nested mutations of other types
+          for (
+            let index = 0;
+            index < args[key].connectOrCreate.length;
+            index++
+          ) {
             args[key].connectOrCreate[
               index
             ].create = await applyRelationsMutationsAcl(
@@ -566,16 +558,25 @@ async function applyRelationsMutationsAcl(
               allPermissions
             );
           }
+        } else if (typeof args[key].connectOrCreate === "object") {
+          args[key].connectOrCreate.create = await applyRelationsMutationsAcl(
+            args[key].connectOrCreate.create,
+            user,
+            relationField.type,
+            allPermissions
+          );
         }
       }
       if (args[key].delete) {
-        for (let index = 0; index < args[key].delete.length; index++) {
-          await applyDeleteOneAcl(
-            { where: args[key].delete[index] },
-            user,
-            relationField.type,
-            permissions
-          );
+        if (Array.isArray(args[key].delete)) {
+          for (let index = 0; index < args[key].delete.length; index++) {
+            await applyDeleteOneAcl(
+              { where: args[key].delete[index] },
+              user,
+              relationField.type,
+              permissions
+            );
+          }
         }
       }
       if (args[key].deleteMany) {
@@ -599,15 +600,31 @@ async function applyRelationsMutationsAcl(
         }
       }
       if (args[key].update) {
-        for (let index = 0; index < args[key].update.length; index++) {
+        if (Array.isArray(args[key].update)) {
+          // We need to do check acl for reations for each item because it might have nested mutations of other types
+          for (let index = 0; index < args[key].update.length; index++) {
+            await applyUpdateOneAcl(
+              args[key].update[index],
+              user,
+              relationField.type,
+              permissions
+            );
+            args[key].update[index] = await applyRelationsMutationsAcl(
+              args[key].update[index],
+              user,
+              relationField.type,
+              allPermissions
+            );
+          }
+        } else if (typeof args[key].update === "object") {
           await applyUpdateOneAcl(
-            args[key].update[index],
+            args[key].update,
             user,
             relationField.type,
             permissions
           );
-          args[key].update[index] = await applyRelationsMutationsAcl(
-            args[key].update[index],
+          args[key].update = await applyRelationsMutationsAcl(
+            args[key].update,
             user,
             relationField.type,
             allPermissions
@@ -615,21 +632,43 @@ async function applyRelationsMutationsAcl(
         }
       }
       if (args[key].upsert) {
-        for (let index = 0; index < args[key].upsert.length; index++) {
-          args[key].upsert[index] = await applyUpsertOneAcl(
-            args[key].upsert[index],
+        if (Array.isArray(args[key].upsert)) {
+          // We need to do check acl for reations for each item because it might have nested mutations of other types
+          for (let index = 0; index < args[key].upsert.length; index++) {
+            args[key].upsert[index] = await applyUpsertOneAcl(
+              args[key].upsert[index],
+              user,
+              relationField.type,
+              permissions
+            );
+            args[key].upsert[index].create = await applyRelationsMutationsAcl(
+              args[key].upsert[index].create,
+              user,
+              relationField.type,
+              allPermissions
+            );
+            args[key].upsert[index].update = await applyRelationsMutationsAcl(
+              args[key].upsert[index].update,
+              user,
+              relationField.type,
+              allPermissions
+            );
+          }
+        } else if (typeof args[key].update === "object") {
+          args[key].upsert = await applyUpsertOneAcl(
+            args[key].upsert,
             user,
             relationField.type,
             permissions
           );
-          args[key].upsert[index].create = await applyRelationsMutationsAcl(
-            args[key].upsert[index].create,
+          args[key].upsert.create = await applyRelationsMutationsAcl(
+            args[key].upsert.create,
             user,
             relationField.type,
             allPermissions
           );
-          args[key].upsert[index].update = await applyRelationsMutationsAcl(
-            args[key].upsert[index].update,
+          args[key].upsert.update = await applyRelationsMutationsAcl(
+            args[key].upsert.update,
             user,
             relationField.type,
             allPermissions
