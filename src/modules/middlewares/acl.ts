@@ -426,8 +426,7 @@ async function applyConnectAcl(
   args,
   user,
   moduleId,
-  permissions,
-  action = "connect"
+  permissions
 ) {
   const hasReadAccess = checkUserPermission("read", permissions);
   if (hasReadAccess === "ALL") {
@@ -437,14 +436,14 @@ async function applyConnectAcl(
     const ownItems = await userOwnItems(itemsWhere, user, moduleId);
     if (!ownItems) {
       throw new ApolloError(
-        `The item/s of the type "${moduleId}" you want to ${action} are not exist or you don't have permission to ${action} them`,
+        `The item/s of the type "${moduleId}" you want to connect are not exist or you don't have permission to connect them`,
         "Forbidden"
       );
     }
     return true;
   } else {
     throw new ApolloError(
-      `You don't have permission to ${action} "${moduleId}" type!`,
+      `You don't have permission to connect "${moduleId}" type!`,
       "Forbidden"
     );
   }
