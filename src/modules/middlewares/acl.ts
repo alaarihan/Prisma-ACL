@@ -28,7 +28,7 @@ export const acl = async ({ parent, args, context, info }, next) => {
     return next();
   }
 };
-const noAuthorTypes = ["User", "RoleAccess", "Category"];
+const noAuthorTypes = ["RoleAccess", "Category"];
 async function checkAcl(args, info, user, moduleId, next) {
   const createOne = `createOne${moduleId}`;
   const uniqueReadType = `findUnique${moduleId}`;
@@ -44,8 +44,8 @@ async function checkAcl(args, info, user, moduleId, next) {
   const deleteMany = `deleteMany${moduleId}`;
   const upsertOne = `upsertOne${moduleId}`;
 
-  // Auto fill author for all roles
   if ([createOne, updateOne, updateMany, upsertOne].includes(info.fieldName)) {
+    // Auto fill author for all roles
     args.data = doFieldAction(
       args.data,
       autoFillAuthor,
@@ -146,7 +146,8 @@ async function checkAcl(args, info, user, moduleId, next) {
       args.data,
       user,
       moduleId,
-      allPermissions
+      allPermissions,
+      args.where
     );
   }
 
@@ -308,7 +309,13 @@ async function applyUpdateOneAcl(args, user, moduleId, permissions) {
   }
 }
 
-async function applyUpsertOneAcl(args, user, moduleId, permissions) {
+async function applyUpsertOneAcl(
+  args,
+  user,
+  moduleId,
+  permissions,
+  parent = null
+) {
   const operationModel = moduleId.charAt(0).toLowerCase() + moduleId.slice(1);
   const hasUpdateAccess = checkUserPermission("update", permissions);
   const hasCreateAccess = checkUserPermission("create", permissions);
@@ -323,24 +330,34 @@ async function applyUpsertOneAcl(args, user, moduleId, permissions) {
     );
   } else if (hasUpdateAccess === "OWN") {
     if (noAuthorTypes.includes(moduleId)) return args;
-    const item = await prisma[operationModel]
-      .findUnique({
-        where: args.where,
-        rejectOnNotFound: false,
-      })
-      .catch((err) => {
+    if (args.where) {
+      const item = await prisma[operationModel]
+        .findUnique({
+          where: args.where,
+          rejectOnNotFound: false,
+        })
+        .catch((err) => {
+          throw new ApolloError(
+            `"${moduleId}" item not exist or you don't have upsert permission to it!`,
+            "Forbidden"
+          );
+        });
+      if (
+        (moduleId === "User" && item?.id !== user.id) ||
+        (moduleId !== "User" && item?.authorId !== user.id)
+      ) {
         throw new ApolloError(
           `"${moduleId}" item not exist or you don't have upsert permission to it!`,
           "Forbidden"
         );
-      });
-    if (
-      (moduleId === "User" && item?.id !== user.id) ||
-      (moduleId !== "User" && item?.authorId !== user.id)
-    ) {
-      throw new ApolloError(
-        `"${moduleId}" item not exist or you don't have upsert permission to it!`,
-        "Forbidden"
+      }
+    }else if(!args.where && parent){
+      // Check one to one relation update permission ( We don't have the item "where" object of the relation)
+      await applyUpdateOneRelationAcl(
+        parent,
+        user,
+        moduleId,
+        permissions
       );
     }
   }
@@ -422,12 +439,7 @@ function applyUniqueReadOwnAcl(user, item) {
   }
 }
 
-async function applyConnectAcl(
-  args,
-  user,
-  moduleId,
-  permissions
-) {
+async function applyConnectAcl(args, user, moduleId, permissions) {
   const hasReadAccess = checkUserPermission("read", permissions);
   if (hasReadAccess === "ALL") {
     return true;
@@ -436,7 +448,7 @@ async function applyConnectAcl(
     const ownItems = await userOwnItems(itemsWhere, user, moduleId);
     if (!ownItems) {
       throw new ApolloError(
-        `The item/s of the type "${moduleId}" you want to connect are not exist or you don't have permission to connect them`,
+        `The item/s of the type "${moduleId}" you are trying to connect are not exist or you don't have permission to connect them`,
         "Forbidden"
       );
     }
@@ -465,6 +477,66 @@ async function applyConnectOrCreateAcl(args, user, moduleId, permissions) {
   } else {
     throw new ApolloError(
       `You don't have permission to connectOrCreate "${moduleId}" type!`,
+      "Forbidden"
+    );
+  }
+}
+
+async function applyDeleteOneRelationAcl(parent, user, moduleId, permissions) {
+  const hasReadAccess = checkUserPermission("delete", permissions);
+  if (hasReadAccess === "ALL") {
+    return true;
+  } else if (hasReadAccess === "OWN") {
+    const operationModel =
+      parent.moduleId.charAt(0).toLowerCase() + parent.moduleId.slice(1);
+    const parentItem = await prisma[operationModel]
+      .findUnique({
+        where: parent.where,
+        include: { [parent.key]: true },
+        rejectOnNotFound: true,
+      })
+      .catch((err) => {
+        return false;
+      });
+    if (parentItem[parent.key]?.authorId !== user.id) {
+      return false;
+    }
+    return true;
+  } else {
+    throw new ApolloError(
+      `You don't have permission to delete "${moduleId}" type!`,
+      "Forbidden"
+    );
+  }
+}
+
+async function applyUpdateOneRelationAcl(parent, user, moduleId, permissions) {
+  const hasUpdateAccess = checkUserPermission("update", permissions);
+  if (hasUpdateAccess === "ALL") {
+    return true;
+  } else if (hasUpdateAccess === "OWN") {
+    if(noAuthorTypes.includes(moduleId)) return true
+    const operationModel =
+      parent.moduleId.charAt(0).toLowerCase() + parent.moduleId.slice(1);
+    const parentItem = await prisma[operationModel]
+      .findUnique({
+        where: parent.where,
+        include: { [parent.key]: true },
+        rejectOnNotFound: true,
+      })
+      .catch((err) => {
+        throw err;
+      });
+    if (parentItem[parent.key]?.authorId !== user.id) {
+      throw new ApolloError(
+        `The item of "${moduleId}" type! that you are trying to update is not exist or you don't have permission to update it!`,
+        "Forbidden"
+      );
+    }
+    return true;
+  } else {
+    throw new ApolloError(
+      `You don't have permission to update "${moduleId}" type!`,
       "Forbidden"
     );
   }
@@ -527,23 +599,19 @@ function applyOneObjectRelationsAcl(user, moduleId, allPermissions, data) {
       );
       if (!permissions) throw new Error("Error in ACL!");
       const hasReadAccess = checkUserPermission("read", permissions);
-      if (hasReadAccess === "OWN" && moduleId === "User") {
-        throw new ApolloError(
-          "You don't have permission to query users!",
-          "Forbidden"
-        );
-      }
       if (!relationField.isList) {
         if (hasReadAccess === "ALL") continue;
-        else if (
-          hasReadAccess === "OWN" &&
-          data[key].authorId &&
-          data[key].authorId !== user.id
-        ) {
-          data[key] = null;
+        else if (hasReadAccess === "OWN") {
+          if (
+            (relationField.type !== "User" &&
+              data[key]?.authorId !== user.id) ||
+            (relationField.type === "User" && data[key]?.id !== user.id)
+          ) {
+            data[key] = null;
+          }
         } else {
           throw new ApolloError(
-            `You don't have permission to query "${moduleId}" type!`,
+            `You don't have permission to query "${relationField.type}" type!`,
             "Forbidden"
           );
         }
@@ -618,7 +686,8 @@ async function applyRelationsMutationsAcl(
   args,
   user,
   moduleId,
-  allPermissions
+  allPermissions,
+  where = null
 ) {
   for (const [key, value] of Object.entries(args)) {
     if (value && typeof value === "object") {
@@ -733,6 +802,13 @@ async function applyRelationsMutationsAcl(
               permissions
             );
           }
+        } else if (args[key].delete === true) {
+          args[key].delete = await applyDeleteOneRelationAcl(
+            { moduleId, key, where },
+            user,
+            relationField.type,
+            permissions
+          );
         }
       }
       if (args[key].deleteMany) {
@@ -773,8 +849,8 @@ async function applyRelationsMutationsAcl(
             );
           }
         } else if (typeof args[key].update === "object") {
-          await applyUpdateOneAcl(
-            args[key].update,
+          await applyUpdateOneRelationAcl(
+            { moduleId, key, where },
             user,
             relationField.type,
             permissions
@@ -810,12 +886,13 @@ async function applyRelationsMutationsAcl(
               allPermissions
             );
           }
-        } else if (typeof args[key].update === "object") {
+        } else if (typeof args[key].upsert === "object") {
           args[key].upsert = await applyUpsertOneAcl(
             args[key].upsert,
             user,
             relationField.type,
-            permissions
+            permissions,
+            { moduleId, key, where }
           );
           args[key].upsert.create = await applyRelationsMutationsAcl(
             args[key].upsert.create,
@@ -938,7 +1015,10 @@ function preventAlteringFields(data, fields, args) {
 function autoFillAuthor(data, fields, { moduleId, user }) {
   if (typeof data === "object" && !noAuthorTypes.includes(moduleId)) {
     if (user.role !== "ADMIN" && (data.author || data.authorId)) {
-      throw new ApolloError("You can't manually set author!", "Forbidden");
+      throw new ApolloError(
+        "You can't manually set/change author!",
+        "Forbidden"
+      );
     } else {
       data.authorId = user.id;
     }
