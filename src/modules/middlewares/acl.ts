@@ -28,7 +28,7 @@ export const acl = async ({ parent, args, context, info }, next) => {
     return next();
   }
 };
-const noAuthorTypes = ["RoleAccess", "Category"];
+const noAuthorTypes = ["User", "RoleAccess", "Category"];
 async function checkAcl(args, info, user, moduleId, next) {
   const createOne = `createOne${moduleId}`;
   const uniqueReadType = `findUnique${moduleId}`;
