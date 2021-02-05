@@ -422,7 +422,7 @@ function applyUniqueReadOwnAcl(user, item) {
   }
 }
 
-async function applyConnectDisconnectAcl(
+async function applyConnectAcl(
   args,
   user,
   moduleId,
@@ -653,7 +653,7 @@ async function applyRelationsMutationsAcl(
       if (args[key].connectOrCreate) {
         // We check if the user has permission to create the type first
         applyCreateAcl(user, relationField.type, permissions);
-        
+
         if (Array.isArray(args[key].connectOrCreate)) {
           for (
             let index = 0;
@@ -692,14 +692,14 @@ async function applyRelationsMutationsAcl(
       }
       if (args[key].connect) {
         if (Array.isArray(args[key].connect)) {
-          await applyConnectDisconnectAcl(
+          await applyConnectAcl(
             args[key].connect,
             user,
             relationField.type,
             permissions
           );
         } else if (typeof args[key].connect === "object") {
-          await applyConnectDisconnectAcl(
+          await applyConnectAcl(
             [args[key].connect],
             user,
             relationField.type,
@@ -707,17 +707,17 @@ async function applyRelationsMutationsAcl(
           );
         }
       }
-      if (args[key].disconnect) {
-        if (Array.isArray(args[key].disconnect)) {
-          await applyConnectDisconnectAcl(
-            args[key].disconnect,
+      if (args[key].set) {
+        if (Array.isArray(args[key].set)) {
+          await applyConnectAcl(
+            args[key].set,
             user,
             relationField.type,
             permissions
           );
-        } else if (typeof args[key].disconnect === "object") {
-          await applyConnectDisconnectAcl(
-            [...args[key].disconnect],
+        } else if (typeof args[key].set === "object") {
+          await applyConnectAcl(
+            [args[key].set],
             user,
             relationField.type,
             permissions
@@ -980,15 +980,3 @@ function genItemsWhere(items, subKey = null) {
   if (whereItems.OR.length < 1) return null;
   return whereItems;
 }
-
-// Todo
-// Check delete/disconnect one to one relations where the key will have boolean type not an object to use it as a "where"
-/* 
-Don't allow "set" if the user don't have read access to the items that he want to set 
-and also we need to check if there is any exiting relations connected to the item and 
-see if he has access to them all before allow the operation for the type
- */
-
-/* 
- Don't allow editing reference fields unless the user has permission to read the corresponding type
- */
