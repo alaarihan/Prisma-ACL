@@ -5,6 +5,7 @@ import { ApolloServer } from "apollo-server-express";
 import { verify } from "jsonwebtoken";
 import { application } from "./modules/application";
 import { prisma } from "./common/prisma";
+import authRoute from "./routes/auth"
 
 const schema = application.createSchemaForApollo();
 
@@ -58,6 +59,7 @@ app.use(function (req, res, next) {
   );
   next();
 });
+app.use('/', authRoute)
 app.listen({ port: 5000 }, () =>
   console.log(`🚀 Server ready at http://localhost:5000${server.graphqlPath}`)
 );
