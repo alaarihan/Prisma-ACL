@@ -39,17 +39,33 @@ enum Permission {
 }
 
 model RoleAccess {
-  id        Int        @id @default(autoincrement())
+  id        Int           @id @default(autoincrement())
   role      UserRole
   type      String
-  create    Boolean    @default(false)
-  read      Permission @default(NONE)
-  update    Permission @default(NONE)
-  delete    Permission @default(NONE)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  create    Boolean       @default(false)
+  read      Permission    @default(NONE)
+  update    Permission    @default(NONE)
+  delete    Permission    @default(NONE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  fields    FieldAccess[]
 
   @@unique([role, type])
+}
+
+model FieldAccess {
+  id           Int        @id @default(autoincrement())
+  roleAccessId Int
+  name         String
+  create       Boolean?
+  read         Permission?
+  update       Permission?
+  delete       Permission?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  roleAccess   RoleAccess @relation(fields: [roleAccessId], references: [id])
+
+  @@unique([roleAccessId, name])
 }
 
 model Log {

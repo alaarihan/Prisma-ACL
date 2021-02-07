@@ -6,26 +6,31 @@
   "private": true,
   "description": "App For Osra",
   "scripts": {
-    "start": "node dist/src",
+    "start": "node dist/server",
     "clean": "rm -rf dist",
     "build": "npm -s run clean && npm -s run generate && tsc",
-    "generate": "prisma generate",
+    "generate": "npm -s run generate:prisma && npm -s run generate:nexus",
+    "generate:prisma": "prisma generate",
+    "generate:nexus": "ts-node --transpile-only src/nexusSchema",
     "create-migration": "prisma migrate dev --preview-feature",
     "migrate-database": "prisma db push --preview-feature",
-    "dev": "ts-node-dev --no-notify --respawn --transpile-only src/index"
+    "dev": "ts-node-dev --no-notify --respawn --transpile-only src/server"
   },
   "dependencies": {
+    "@paljs/nexus": "^2.12.2",
     "@paljs/plugins": "^2.11.1",
     "@prisma/client": "^2.16.0",
-    "apollo-server-express": "^2.19.2",
     "bcrypt": "^5.0.0",
     "dotenv": "^8.2.0",
     "ejs": "^3.1.5",
     "email-templates": "^8.0.3",
-    "express": "^4.17.1",
+    "fastify": "^3.11.0",
     "graphql": "^15.4.0",
     "graphql-modules": "^1.0.0",
     "jsonwebtoken": "^8.5.1",
+    "mercurius": "^6.12.0",
+    "nexus": "^1.0.0",
+    "nexus-plugin-prisma": "^0.30.0",
     "reflect-metadata": "^0.1.13"
   },
   "devDependencies": {
@@ -35,6 +40,11 @@
     "ts-node": "^9.1.1",
     "ts-node-dev": "^1.1.1",
     "typescript": "^4.1.3"
+  },
+  "prettier": {
+    "singleQuote": true,
+    "semi": false,
+    "trailingComma": "all"
   },
   "repository": "",
   "author": "Alaa Rihan"

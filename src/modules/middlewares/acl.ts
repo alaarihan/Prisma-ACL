@@ -1059,3 +1059,10 @@ function genItemsWhere(items, subKey = null) {
   if (whereItems.OR.length < 1) return null;
   return whereItems;
 }
+
+
+// Todo
+/* 
+Add field level permisions and make it possible to change the default behavior for relation fields
+Allow access to author name for all but not the sensetive fields like email and role
+ */

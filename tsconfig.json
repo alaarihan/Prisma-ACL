@@ -1,19 +1,15 @@
 {
   "compilerOptions": {
-    "experimentalDecorators": true,
     "module": "commonjs",
-    "target": "es2015",
-    "lib": ["es2015", "esnext.asynciterable"],
+    "esModuleInterop": true,
+    "target": "es2017",
     "noImplicitAny": false,
-    "suppressImplicitAnyIndexErrors": true,
     "moduleResolution": "node",
-    "emitDecoratorMetadata": true,
     "sourceMap": true,
-    "declaration": true,
-    "outDir": "./dist",
-    "rootDir": ".",
-    "esModuleInterop": true
+    "outDir": "dist",
+    "strictNullChecks": false,
+    "skipLibCheck": true
   },
   "include": ["src"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "dist"]
 }
