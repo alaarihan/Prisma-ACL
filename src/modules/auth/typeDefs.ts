@@ -12,7 +12,6 @@ export default gql`
       email: String!
       password: String!
       country: String
-      dandaraCenter: String
       dateOfBirth: DateTime
     ): AuthPayload!
     verifyUserEmail(email: String, token: String!): Boolean!

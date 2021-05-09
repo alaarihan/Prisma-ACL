@@ -8,7 +8,6 @@ export default gql`
     lastName: String
     role: UserRole!
     country: String
-    dandaraCenter: String
     dateOfBirth: DateTime
     createdAt: DateTime!
     updatedAt: DateTime!

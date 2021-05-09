@@ -1,10 +1,10 @@
 {
-  "name": "dandara-app",
+  "name": "prisma-acl",
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
   "private": true,
-  "description": "App For Osra",
+  "description": "For limit access to prisma gql resolvers",
   "scripts": {
     "start": "node dist/src",
     "clean": "rm -rf dist",

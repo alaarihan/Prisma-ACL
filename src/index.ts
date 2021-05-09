@@ -30,7 +30,6 @@ const server = new ApolloServer({
               id: true,
               email: true,
               country: true,
-              dandaraCenter: true,
               firstName: true,
               lastName: true,
               role: true,
